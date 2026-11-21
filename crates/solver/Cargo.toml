@@ -1,0 +1,23 @@
+[package]
+name = "anoma-solver"
+description = "A solver of intents: it matches intents with the CP-SAT solver of Google OR-Tools and proves the actions that fill them"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+
+[dependencies]
+anoma-arm = { workspace = true }
+anoma-discovery = { workspace = true }
+anoma-intent = { workspace = true }
+anoma-intent-pool = { workspace = true }
+anoma-prover = { workspace = true }
+ark-ff = { workspace = true }
+cp_sat = { workspace = true }
+rand_core = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }

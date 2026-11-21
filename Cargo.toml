@@ -18,6 +18,7 @@ anoma-bindings = { path = "crates/bindings" }
 anoma-discovery = { path = "crates/discovery" }
 anoma-groth16-wrap = { path = "crates/groth16-wrap" }
 anoma-intent = { path = "crates/intent" }
+anoma-intent-pool = { path = "crates/intent-pool" }
 anoma-prover = { path = "crates/prover" }
 anyhow = "1.0.104"
 ark-bn254 = { version = "0.6.0", default-features = false, features = ["scalar_field"] }
@@ -26,6 +27,7 @@ ark-ff = "0.6.0"
 ark-grumpkin = "0.6.0"
 bincode = "1.3.3"
 bn254_blackbox_solver = "1.0.0"
+cp_sat = "0.4.1"
 hex = "0.4.3"
 k256 = { version = "0.13.4", features = ["serde"] }
 rand_core = { version = "0.6.4", features = ["getrandom"] }
