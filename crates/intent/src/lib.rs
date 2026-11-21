@@ -6,7 +6,7 @@ mod payload;
 pub use payload::{Mismatch, Offer, Payload};
 
 use anoma_arm::digest::AppData;
-use anoma_arm::hash::poseidon2_hash;
+use anoma_arm::hash::{Domain, hash};
 use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
 use anoma_arm::{Fr, Scalar};
 use anoma_prover::Error;
@@ -32,14 +32,17 @@ pub struct Terms {
 impl Terms {
     /// The label of an intent with these terms, as the intent logic computes it.
     pub fn hash(&self) -> Fr {
-        poseidon2_hash(&[
-            self.want_logic_ref,
-            self.want_label_ref,
-            self.want_value_ref,
-            Fr::from(self.want_quantity),
-            self.receiver_nullifier_key_commitment,
-            self.want_rand_seed,
-        ])
+        hash(
+            Domain::Terms,
+            &[
+                self.want_logic_ref,
+                self.want_label_ref,
+                self.want_value_ref,
+                Fr::from(self.want_quantity),
+                self.receiver_nullifier_key_commitment,
+                self.want_rand_seed,
+            ],
+        )
     }
 
     /// The resource of these terms for the intent with the nullifier `intent_nullifier`: the resource that fills it.

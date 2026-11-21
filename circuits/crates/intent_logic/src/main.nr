@@ -1,5 +1,4 @@
-use arm::{action::action_tree_root, resource::Resource};
-use poseidon::poseidon2::Poseidon2;
+use arm::{action::action_tree_root, hash::{self, hash}, resource::Resource};
 
 /// What the owner of an intent wants for it: each field of the resource that fills it, except the nonce, which comes from the nullifier of the intent.
 pub struct Terms {
@@ -13,7 +12,8 @@ pub struct Terms {
 
 impl Terms {
     pub fn hash(self) -> Field {
-        Poseidon2::hash(
+        hash(
+            hash::TERMS,
             [
                 self.want_logic_ref,
                 self.want_label_ref,
@@ -22,7 +22,6 @@ impl Terms {
                 self.receiver_nullifier_key_commitment,
                 self.want_rand_seed,
             ],
-            6,
         )
     }
 }
