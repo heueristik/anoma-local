@@ -1,6 +1,6 @@
-//! A solver of intents. It finds the intents for its keys in an intent pool, checks their payloads, chooses with
-//! CP-SAT the most intents that balance together, and proves the actions that fill them and that take the surplus.
-//! The result is a balanced partial transaction, which the solver proves and sends.
+//! A solver of intents. It finds the intents for its keys in an intent pool, checks their payloads and proofs, chooses
+//! with CP-SAT the most intents that balance together, and proves the actions that fill them and that take the
+//! surplus. The result is a balanced partial transaction, which the solver proves and sends.
 
 pub mod matching;
 
@@ -58,8 +58,11 @@ impl Solver {
         toolchain: &Toolchain,
         pool: &mut IntentPool,
     ) -> Result<Option<Solution>, Error> {
-        let token_logic_ref = toolchain.key_hash(&self.token_logic.circuit)?;
-        let intent_logic_ref = toolchain.key_hash(anoma_intent::CIRCUIT)?;
+        let logic_keys = [
+            toolchain.verification_key(&self.token_logic.circuit)?,
+            toolchain.verification_key(anoma_intent::CIRCUIT)?,
+        ];
+        let (token_logic_ref, intent_logic_ref) = (logic_keys[0].hash, logic_keys[1].hash);
         let mut nullifiers = BTreeSet::new();
         let candidates: Vec<Candidate> = pool
             .discover(&self.keys)
@@ -82,6 +85,14 @@ impl Solver {
                             partial,
                         })
                     })
+            })
+            // An action whose proofs do not verify makes the proof of the whole settlement fail.
+            .filter(|candidate| {
+                candidate
+                    .partial
+                    .actions
+                    .iter()
+                    .all(|proved| proved.verify(toolchain, &logic_keys).is_ok())
             })
             .filter(|candidate| has_fresh_nullifiers(&candidate.partial, &mut nullifiers))
             .collect();

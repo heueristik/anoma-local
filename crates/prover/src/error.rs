@@ -45,6 +45,10 @@ pub enum Error {
         key_hash: String,
     },
     #[error(
+        "the logic proof of the logic ref {logic_ref} does not carry a verification key that the verifier knows"
+    )]
+    UnknownLogic { logic_ref: String },
+    #[error(
         "the transaction is not balanced: its delta is not the generator times the sum of its rcv values"
     )]
     Unbalanced,

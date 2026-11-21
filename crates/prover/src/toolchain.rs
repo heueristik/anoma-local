@@ -152,6 +152,44 @@ impl Toolchain {
         Ok(proof)
     }
 
+    /// Verifies a proof of `circuit` with `key` against `public_inputs`; an invalid proof is a `Tool` error.
+    pub fn verify(
+        &self,
+        circuit: &str,
+        key: &VerificationKey,
+        proof: &[Fr],
+        public_inputs: &[Fr],
+        target: Target,
+    ) -> Result<(), Error> {
+        let directory = self.work.join("verify").join(format!(
+            "{circuit}-{}-{}",
+            std::process::id(),
+            RUN.fetch_add(1, Ordering::Relaxed)
+        ));
+        create_dir(&directory)?;
+        let [key_file, proof_file, public_inputs_file] =
+            ["vk", "proof", "public_inputs"].map(|name| directory.join(name));
+        write(&key_file, &to_field_bytes(&key.fields))?;
+        write(&proof_file, &to_field_bytes(proof))?;
+        write(&public_inputs_file, &to_field_bytes(public_inputs))?;
+        let verified = self.run(
+            "bb verify",
+            circuit,
+            Command::new(&self.bb)
+                .args(["verify", "-t", target.name(), "-k"])
+                .arg(&key_file)
+                .arg("-p")
+                .arg(&proof_file)
+                .arg("-i")
+                .arg(&public_inputs_file),
+        );
+        std::fs::remove_dir_all(&directory).map_err(|source| Error::Io {
+            path: directory,
+            source,
+        })?;
+        verified
+    }
+
     /// The directory with the `vk` and `vk_hash` files of a circuit, which this writes on the first call.
     fn key_directory(&self, circuit: &str) -> Result<PathBuf, Error> {
         let directory = self.work.join("vk").join(circuit);

@@ -154,6 +154,63 @@ fn solve_fills_a_copied_intent_once() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
+    let [alice, bob, dave, sally] = [1u64, 2, 5, 4].map(|seed| NullifierKey(Fr::from(seed)));
+    let solver = solver(sally);
+    let (apples, bananas) = (4, 7);
+    let (alice_wants, bob_wants, dave_wants) = (4, 3, 3);
+    let mints = [
+        fixtures::mint(token(APPLE, apples, alice, 11)?, 21)?,
+        fixtures::mint(token(BANANA, bananas, bob, 12)?, 22)?,
+        fixtures::mint(token(APPLE, apples, dave, 14)?, 24)?,
+    ];
+    let belt = belt(&mints);
+    let mut pool = IntentPool::default();
+    let alice_intent = pool.submit(propose(
+        &mints[0],
+        belt.path(0)?,
+        alice,
+        (BANANA, alice_wants),
+        &ReceiverKeys::random(),
+        &solver,
+        101,
+    )?);
+    let bob_intent = pool.submit(propose(
+        &mints[1],
+        belt.path(1)?,
+        bob,
+        (APPLE, bob_wants),
+        &ReceiverKeys::random(),
+        &solver,
+        102,
+    )?);
+    let mut dave_actions = propose(
+        &mints[2],
+        belt.path(2)?,
+        dave,
+        (BANANA, dave_wants),
+        &ReceiverKeys::random(),
+        &solver,
+        105,
+    )?;
+    assert!(
+        2 * apples >= bob_wants && bananas >= alice_wants + dave_wants,
+        "the premise is that the intents of Alice, Bob and Dave balance together"
+    );
+
+    let proof = &mut dave_actions[0].compliance_proof.fields;
+    let middle = proof.len() / 2;
+    proof[middle] += Fr::from(1u64);
+    pool.submit(dave_actions);
+
+    let solution = solver
+        .solve(fixtures::toolchain(), &mut pool)?
+        .context("the solver fills no intent")?;
+    assert_eq!(solution.filled, [alice_intent, bob_intent]);
+    Ok(())
+}
+
 /// A solver that trades tokens of the trivial logic and keeps its surplus for `owner`.
 fn solver(owner: NullifierKey) -> Solver {
     Solver {

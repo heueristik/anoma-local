@@ -4,10 +4,11 @@
 
 mod common;
 
+use anoma_arm::Fr;
 use anoma_arm::field::coordinates;
 use anoma_arm::resource::action_tree_root;
 use anoma_prover::Error;
-use anoma_prover::action::prove;
+use anoma_prover::action::{Logic, ProvedAction, prove};
 
 #[test]
 fn prove_gives_the_public_inputs_that_the_step_circuits_check() -> anyhow::Result<()> {
@@ -68,4 +69,63 @@ fn prove_errors_on_a_logic_ref_that_is_not_the_key_hash_of_the_logic() -> anyhow
         "got {result:?}"
     );
     Ok(())
+}
+
+#[test]
+fn verify_accepts_the_proofs_of_an_action() -> anyhow::Result<()> {
+    let toolchain = common::toolchain();
+    let proved = proved_action()?;
+
+    proved.verify(
+        toolchain,
+        &[toolchain.verification_key(&Logic::trivial().circuit)?],
+    )?;
+    Ok(())
+}
+
+#[test]
+fn verify_errors_on_a_changed_compliance_proof() -> anyhow::Result<()> {
+    let toolchain = common::toolchain();
+    let mut proved = proved_action()?;
+    let middle = proved.compliance_proof.fields.len() / 2;
+    proved.compliance_proof.fields[middle] += Fr::from(1u64);
+
+    let result = proved.verify(
+        toolchain,
+        &[toolchain.verification_key(&Logic::trivial().circuit)?],
+    );
+
+    assert!(
+        matches!(
+            result,
+            Err(Error::Tool {
+                command: "bb verify",
+                ..
+            })
+        ),
+        "got {result:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn verify_errors_on_a_logic_whose_key_the_verifier_does_not_know() -> anyhow::Result<()> {
+    let proved = proved_action()?;
+
+    let result = proved.verify(common::toolchain(), &[]);
+
+    assert!(
+        matches!(result, Err(Error::UnknownLogic { .. })),
+        "got {result:?}"
+    );
+    Ok(())
+}
+
+/// The proved action of an ephemeral token, whose two resources have the trivial logic.
+fn proved_action() -> anyhow::Result<ProvedAction> {
+    let mut partial = prove(common::toolchain(), &common::ephemeral_action(1, 5, 5)?)?;
+    partial
+        .actions
+        .pop()
+        .ok_or_else(|| anyhow::anyhow!("prove gives no action"))
 }

@@ -3,7 +3,7 @@
 use anoma_arm::belt::MembershipPath;
 use anoma_arm::delta::unit_delta;
 use anoma_arm::digest::{Action, AppData};
-use anoma_arm::field::to_hex;
+use anoma_arm::field::{coordinates, to_hex};
 use anoma_arm::kind::Kind;
 use anoma_arm::resource::{NullifierKey, Resource, action_tree_root, created_nonce};
 use anoma_arm::{Fr, Point, Scalar};
@@ -96,6 +96,72 @@ pub struct ProvedAction {
     pub compliance_proof: Proof,
     pub consumed_logic_proof: LogicProof,
     pub created_logic_proof: LogicProof,
+}
+
+impl ProvedAction {
+    /// Verifies the three leaf proofs against the public inputs that the step circuits give them. Each logic proof must
+    /// carry one of `logic_keys`, the keys of the logics that the caller knows.
+    pub fn verify(
+        &self,
+        toolchain: &Toolchain,
+        logic_keys: &[VerificationKey],
+    ) -> Result<(), Error> {
+        let action = &self.action;
+        let (delta_x, delta_y) = coordinates(self.delta);
+        toolchain.verify(
+            COMPLIANCE,
+            &toolchain.verification_key(COMPLIANCE)?,
+            &self.compliance_proof.fields,
+            &[
+                action.nullifier,
+                action.consumed_logic_ref,
+                action.commitment_tree_root,
+                action.commitment,
+                action.created_logic_ref,
+                delta_x,
+                delta_y,
+            ],
+            Target::Leaf,
+        )?;
+        let root = action_tree_root(action.nullifier, action.commitment);
+        for (logic_proof, logic_ref, public_inputs) in [
+            (
+                &self.consumed_logic_proof,
+                action.consumed_logic_ref,
+                [
+                    action.nullifier,
+                    Fr::from(1u64),
+                    root,
+                    action.consumed_app_data.hash(),
+                ],
+            ),
+            (
+                &self.created_logic_proof,
+                action.created_logic_ref,
+                [
+                    action.commitment,
+                    Fr::from(0u64),
+                    root,
+                    action.created_app_data.hash(),
+                ],
+            ),
+        ] {
+            let key = logic_keys
+                .iter()
+                .find(|key| key.hash == logic_ref && **key == logic_proof.verification_key)
+                .ok_or_else(|| Error::UnknownLogic {
+                    logic_ref: to_hex(logic_ref),
+                })?;
+            toolchain.verify(
+                &to_hex(logic_ref),
+                key,
+                &logic_proof.proof.fields,
+                &public_inputs,
+                Target::Leaf,
+            )?;
+        }
+        Ok(())
+    }
 }
 
 /// Proves an action, as a partial transaction of one action.
