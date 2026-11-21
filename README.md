@@ -1,5 +1,7 @@
 # Anoma local
 
+The goal of Anoma local is to make general, privacy-preserving, intent-centric applications possible.
+
 Anoma local proves resource machine transactions on the device of each user. Each party proves its own actions with Noir. A relayer, a solver or the party composes the actions into a balanced transaction and wraps its proof into one Groth16 proof. The immutable `AnomaVerifier` contract checks that proof, adds the commitments of the created resources to its commitment tree, records the nullifiers, and makes the forwarder calls that the resources carry.
 
 The terms are in [CONTEXT.md](CONTEXT.md).

@@ -1,5 +1,7 @@
 # Anoma local — glossary
 
+The goal of Anoma local is to make general, privacy-preserving, intent-centric applications possible.
+
 ## Resources and actions
 
 - **Resource**: an immutable record of eight fields: logic ref, label ref, value ref, quantity, nonce, nullifier key commitment, the ephemeral flag and a random seed. A transaction consumes resources and creates resources.
