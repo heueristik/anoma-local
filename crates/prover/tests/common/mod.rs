@@ -8,7 +8,7 @@ use anoma_arm::{Fr, Scalar};
 use anoma_integration_test::fixtures::token;
 use anoma_prover::action::{ActionWitness, Logic};
 
-pub use anoma_integration_test::fixtures::toolchain;
+pub use anoma_integration_test::fixtures::circuit_prover;
 
 /// The directory for the Groth16 keys, which stays across runs.
 pub fn wrap_keys_directory() -> PathBuf {

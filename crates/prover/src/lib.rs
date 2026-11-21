@@ -5,9 +5,9 @@
 
 pub mod action;
 pub mod circuit_prover;
+pub mod cli_prover;
 mod error;
 pub mod inputs;
-pub mod toolchain;
 pub mod transaction;
 
 pub use error::Error;

@@ -27,7 +27,7 @@ const CHERRY: u64 = 3;
 #[tokio::test(flavor = "multi_thread")]
 async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_in_the_pool()
 -> anyhow::Result<()> {
-    let toolchain = fixtures::toolchain();
+    let prover = fixtures::circuit_prover();
     let keys = fixtures::wrap_keys(&PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("wrap-keys"))?;
     let work = TempDir::new()?;
     let chain = Chain::deploy(&keys, work.path()).await?;
@@ -40,13 +40,13 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
         fixtures::mint(token(BANANA, 7, bob, 12)?, 22)?,
         fixtures::mint(token(CHERRY, 5, carol, 13)?, 23)?,
     ];
-    let mut minted = action::prove(toolchain, &mints[0])?;
+    let mut minted = action::prove(prover, &mints[0])?;
     for mint in &mints[1..] {
-        minted = minted.compose(action::prove(toolchain, mint)?);
+        minted = minted.compose(action::prove(prover, mint)?);
     }
     chain
         .execute(&transaction::prove(
-            toolchain,
+            prover,
             &minted,
             &chain.deployment,
             &keys,
@@ -85,7 +85,7 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
     )?);
 
     let solution = solver
-        .solve(toolchain, &pool, belt.root())?
+        .solve(prover, &pool, belt.root())?
         .context("the solver fills no intent")?;
     assert_eq!(solution.filled, [alice_intent, bob_intent]);
     assert_eq!(
@@ -103,7 +103,7 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
         "no action shows whether its consumed resource is ephemeral"
     );
 
-    let settlement = transaction::prove(toolchain, &solution.partial, &chain.deployment, &keys)?;
+    let settlement = transaction::prove(prover, &solution.partial, &chain.deployment, &keys)?;
     chain.execute(&settlement).await?;
     for &id in &solution.filled {
         pool.take(id);
@@ -170,7 +170,7 @@ fn solve_fills_a_copied_intent_once() -> anyhow::Result<()> {
     );
 
     let solution = solver
-        .solve(fixtures::toolchain(), &pool, belt.root())?
+        .solve(fixtures::circuit_prover(), &pool, belt.root())?
         .context("the solver fills no intent")?;
     assert_eq!(solution.filled, [alice_intent, bob_intent]);
     Ok(())
@@ -227,7 +227,7 @@ fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
     pool.submit(dave_actions);
 
     let solution = solver
-        .solve(fixtures::toolchain(), &pool, belt.root())?
+        .solve(fixtures::circuit_prover(), &pool, belt.root())?
         .context("the solver fills no intent")?;
     assert_eq!(solution.filled, [alice_intent, bob_intent]);
     Ok(())

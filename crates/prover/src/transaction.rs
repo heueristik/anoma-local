@@ -11,8 +11,8 @@ use ark_ec::{AffineRepr, CurveGroup};
 use crate::Error;
 use crate::action::{COMPLIANCE, ProvedAction};
 use crate::circuit_prover::{CircuitProver, Target};
+use crate::cli_prover::to_field_bytes;
 use crate::inputs::{self, Field, StepState, circuit_inputs, fields};
-use crate::toolchain::to_field_bytes;
 
 /// The circuit of the step proof of the first action.
 pub const FIRST_STEP: &str = "first_step";

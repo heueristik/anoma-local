@@ -13,7 +13,7 @@ use crate::circuit_prover::{
 
 /// The nargo and bb binaries, the compiled circuit workspace, and a directory for the files of the runs.
 #[derive(Clone, Debug)]
-pub struct Toolchain {
+pub struct CliProver {
     pub nargo: PathBuf,
     pub bb: PathBuf,
     pub circuits: PathBuf,
@@ -47,7 +47,7 @@ pub enum CliError {
 /// Makes the names of the files of each run unique in the process.
 static RUN: AtomicU64 = AtomicU64::new(0);
 
-impl CircuitProver for Toolchain {
+impl CircuitProver for CliProver {
     /// Writes the verification key of a circuit on the first call, and reads it.
     fn verification_key(&self, circuit: &str) -> Result<VerificationKey, CircuitError> {
         let failed = |source| failed(circuit, source);
@@ -165,7 +165,7 @@ impl CircuitProver for Toolchain {
     }
 }
 
-impl Toolchain {
+impl CliProver {
     /// Takes nargo and bb from the `NARGO` and `BB` variables, or else from the `PATH`.
     pub fn from_env(circuits: PathBuf, work: PathBuf) -> Self {
         let tool = |variable, default| {

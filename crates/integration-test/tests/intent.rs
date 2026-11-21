@@ -25,7 +25,7 @@ const BANANA: u64 = 2;
 #[tokio::test(flavor = "multi_thread")]
 async fn execute_settles_the_intent_example_after_several_composition_steps() -> anyhow::Result<()>
 {
-    let toolchain = fixtures::toolchain();
+    let prover = fixtures::circuit_prover();
     let keys = fixtures::wrap_keys(&wrap_keys_directory())?;
     let work = TempDir::new()?;
     let chain = Chain::deploy(&keys, work.path()).await?;
@@ -34,12 +34,11 @@ async fn execute_settles_the_intent_example_after_several_composition_steps() ->
 
     let alice_apples = fixtures::mint(token(APPLE, 4, alice, 11)?, 21)?;
     let bob_bananas = fixtures::mint(token(BANANA, 7, bob, 12)?, 22)?;
-    let mint =
-        action::prove(toolchain, &alice_apples)?.compose(action::prove(toolchain, &bob_bananas)?);
+    let mint = action::prove(prover, &alice_apples)?.compose(action::prove(prover, &bob_bananas)?);
     execute(
         &chain,
         &mut belt,
-        &transaction::prove(toolchain, &mint, &chain.deployment, &keys)?,
+        &transaction::prove(prover, &mint, &chain.deployment, &keys)?,
     )
     .await?;
 
@@ -52,12 +51,12 @@ async fn execute_settles_the_intent_example_after_several_composition_steps() ->
     let composed = alice_part.partial.compose(bob_part.partial);
     assert!(!composed.is_balanced());
     let composed = composed.compose(action::prove(
-        toolchain,
+        prover,
         &alice_intent.fill(&alice_part.resource, belt.root(), 41)?,
     )?);
     assert!(!composed.is_balanced());
     let composed = composed.compose(action::prove(
-        toolchain,
+        prover,
         &bob_intent.fill(&bob_part.resource, belt.root(), 42)?,
     )?);
     assert!(
@@ -66,16 +65,16 @@ async fn execute_settles_the_intent_example_after_several_composition_steps() ->
     );
     let composed = composed
         .compose(action::prove(
-            toolchain,
+            prover,
             &take_surplus(token(APPLE, 1, sally, 15)?, belt.root(), 51)?,
         )?)
         .compose(action::prove(
-            toolchain,
+            prover,
             &take_surplus(token(BANANA, 3, sally, 16)?, belt.root(), 52)?,
         )?);
     assert!(composed.is_balanced());
 
-    let settlement = transaction::prove(toolchain, &composed, &chain.deployment, &keys)?;
+    let settlement = transaction::prove(prover, &composed, &chain.deployment, &keys)?;
     execute(&chain, &mut belt, &settlement).await?;
     // Alice computes the resource that fills her intent from her terms, with no payload from Sally.
     let alice_fill = alice_intent
@@ -106,7 +105,7 @@ fn prove_errors_on_a_fill_with_another_quantity_than_the_terms() -> anyhow::Resu
     witness.consumed_logic =
         anoma_intent::consumed_logic(&resource, intent.nullifier_key, &terms, &witness.created)?;
 
-    let result = action::prove(fixtures::toolchain(), &witness);
+    let result = action::prove(fixtures::circuit_prover(), &witness);
 
     let Err(Error::Circuit(CircuitError::Unsatisfied { reason, .. })) = result else {
         anyhow::bail!("expected inputs that do not satisfy the intent logic, got {result:?}");
@@ -180,7 +179,7 @@ impl Intent {
         )?;
         let resource = witness.created;
         Ok(Part {
-            partial: action::prove(fixtures::toolchain(), &witness)?,
+            partial: action::prove(fixtures::circuit_prover(), &witness)?,
             resource,
         })
     }

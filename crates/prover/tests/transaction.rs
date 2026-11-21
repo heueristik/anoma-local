@@ -19,19 +19,19 @@ const DEPLOYMENT: Deployment = Deployment {
 #[test]
 fn prove_gives_a_groth16_proof_of_the_bound_action_digest_of_a_composed_transaction()
 -> anyhow::Result<()> {
-    let toolchain = common::toolchain();
-    let keys = transaction::single_party_wrap_keys(toolchain, &common::wrap_keys_directory())
+    let prover = common::circuit_prover();
+    let keys = transaction::single_party_wrap_keys(prover, &common::wrap_keys_directory())
         .context("set up the Groth16 keys")?;
     // Each action alone is unbalanced; their imbalances cancel.
-    let first = action::prove(toolchain, &common::ephemeral_action(1, 5, 3)?)?;
-    let second = action::prove(toolchain, &common::ephemeral_action(3, 3, 5)?)?;
+    let first = action::prove(prover, &common::ephemeral_action(1, 5, 3)?)?;
+    let second = action::prove(prover, &common::ephemeral_action(3, 3, 5)?)?;
     assert!(
         !first.is_balanced() && !second.is_balanced(),
         "the premise is that each action is unbalanced"
     );
     let partial = first.compose(second);
 
-    let transaction = transaction::prove(toolchain, &partial, &DEPLOYMENT, &keys)?;
+    let transaction = transaction::prove(prover, &partial, &DEPLOYMENT, &keys)?;
 
     anoma_groth16_wrap::verify(&keys, &transaction.proof).context("verify the Groth16 proof")?;
     let instances: Vec<_> = transaction
@@ -48,11 +48,11 @@ fn prove_gives_a_groth16_proof_of_the_bound_action_digest_of_a_composed_transact
 
 #[test]
 fn prove_errors_on_an_unbalanced_transaction() -> anyhow::Result<()> {
-    let toolchain = common::toolchain();
-    let partial = action::prove(toolchain, &common::ephemeral_action(1, 5, 3)?)?;
+    let prover = common::circuit_prover();
+    let partial = action::prove(prover, &common::ephemeral_action(1, 5, 3)?)?;
     let keys = anoma_groth16_wrap::Keys::new(common::wrap_keys_directory());
 
-    let result = transaction::prove(toolchain, &partial, &DEPLOYMENT, &keys);
+    let result = transaction::prove(prover, &partial, &DEPLOYMENT, &keys);
 
     assert!(matches!(result, Err(Error::Unbalanced)), "got {result:?}");
     Ok(())

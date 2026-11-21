@@ -12,15 +12,15 @@ use anoma_groth16_wrap::Keys;
 use anoma_intent::{Offer, Payload, Terms};
 use anoma_prover::action::{self, ActionWitness, Logic, Membership, ProvedAction};
 use anoma_prover::circuit_prover::CircuitProver;
-use anoma_prover::toolchain::Toolchain;
+use anoma_prover::cli_prover::CliProver;
 use anoma_prover::transaction;
 use anyhow::Context;
 use tempfile::TempDir;
 
-/// The toolchain on the compiled circuits, with one work directory for each test binary.
-pub fn toolchain() -> &'static Toolchain {
-    static TOOLCHAIN: OnceLock<(TempDir, Toolchain)> = OnceLock::new();
-    &TOOLCHAIN
+/// The circuit prover on the compiled circuits, with one work directory for each test binary.
+pub fn circuit_prover() -> &'static CliProver {
+    static CIRCUIT_PROVER: OnceLock<(TempDir, CliProver)> = OnceLock::new();
+    &CIRCUIT_PROVER
         .get_or_init(|| {
             let circuits = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../circuits");
             assert!(
@@ -28,20 +28,21 @@ pub fn toolchain() -> &'static Toolchain {
                 "the premise is that `just circuits-keys` compiled the circuits"
             );
             let work = TempDir::new().expect("a temporary directory");
-            let toolchain = Toolchain::from_env(circuits, work.path().to_path_buf());
-            (work, toolchain)
+            let prover = CliProver::from_env(circuits, work.path().to_path_buf());
+            (work, prover)
         })
         .1
 }
 
 /// The Groth16 keys of the root circuit, which stay in `directory` across runs.
 pub fn wrap_keys(directory: &Path) -> anyhow::Result<Keys> {
-    transaction::single_party_wrap_keys(toolchain(), directory).context("set up the Groth16 keys")
+    transaction::single_party_wrap_keys(circuit_prover(), directory)
+        .context("set up the Groth16 keys")
 }
 
 /// The logic ref of the trivial logic, which the token resources of the tests use.
 pub fn token_logic_ref() -> anyhow::Result<Fr> {
-    Ok(toolchain()
+    Ok(circuit_prover()
         .verification_key(&Logic::trivial().circuit)
         .context("write the key of the trivial logic")?
         .hash)
@@ -49,7 +50,7 @@ pub fn token_logic_ref() -> anyhow::Result<Fr> {
 
 /// The logic ref of the intent logic.
 pub fn intent_logic_ref() -> anyhow::Result<Fr> {
-    Ok(toolchain()
+    Ok(circuit_prover()
         .verification_key(anoma_intent::CIRCUIT)
         .context("write the key of the intent logic")?
         .hash)
@@ -166,5 +167,5 @@ pub fn propose(
         seed,
     )?;
     witness.created_app_data = anoma_discovery::app_data(solver, &payload.to_bytes())?;
-    Ok(action::prove(toolchain(), &witness)?.actions)
+    Ok(action::prove(circuit_prover(), &witness)?.actions)
 }

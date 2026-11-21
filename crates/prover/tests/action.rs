@@ -15,7 +15,7 @@ use anoma_prover::circuit_prover::{CircuitError, CircuitProver};
 fn prove_gives_the_public_inputs_that_the_step_circuits_check() -> anyhow::Result<()> {
     let witness = common::ephemeral_action(1, 5, 5)?;
 
-    let partial = prove(common::toolchain(), &witness)?;
+    let partial = prove(common::circuit_prover(), &witness)?;
 
     let [proved] = &partial.actions[..] else {
         anyhow::bail!("expected one action, got {}", partial.actions.len());
@@ -63,7 +63,7 @@ fn prove_errors_on_a_logic_ref_that_is_not_the_key_hash_of_the_logic() -> anyhow
     let mut witness = common::ephemeral_action(1, 5, 5)?;
     witness.created.logic_ref += anoma_arm::Fr::from(1u64);
 
-    let result = prove(common::toolchain(), &witness);
+    let result = prove(common::circuit_prover(), &witness);
 
     assert!(
         matches!(result, Err(Error::LogicRef { .. })),
@@ -74,26 +74,26 @@ fn prove_errors_on_a_logic_ref_that_is_not_the_key_hash_of_the_logic() -> anyhow
 
 #[test]
 fn verify_accepts_the_proofs_of_an_action() -> anyhow::Result<()> {
-    let toolchain = common::toolchain();
+    let prover = common::circuit_prover();
     let proved = proved_action()?;
 
     proved.verify(
-        toolchain,
-        &[toolchain.verification_key(&Logic::trivial().circuit)?],
+        prover,
+        &[prover.verification_key(&Logic::trivial().circuit)?],
     )?;
     Ok(())
 }
 
 #[test]
 fn verify_errors_on_a_changed_compliance_proof() -> anyhow::Result<()> {
-    let toolchain = common::toolchain();
+    let prover = common::circuit_prover();
     let mut proved = proved_action()?;
     let middle = proved.compliance_proof.fields.len() / 2;
     proved.compliance_proof.fields[middle] += Fr::from(1u64);
 
     let result = proved.verify(
-        toolchain,
-        &[toolchain.verification_key(&Logic::trivial().circuit)?],
+        prover,
+        &[prover.verification_key(&Logic::trivial().circuit)?],
     );
 
     assert!(
@@ -107,7 +107,7 @@ fn verify_errors_on_a_changed_compliance_proof() -> anyhow::Result<()> {
 fn verify_errors_on_a_logic_whose_key_the_verifier_does_not_know() -> anyhow::Result<()> {
     let proved = proved_action()?;
 
-    let result = proved.verify(common::toolchain(), &[]);
+    let result = proved.verify(common::circuit_prover(), &[]);
 
     assert!(
         matches!(result, Err(Error::UnknownLogic { .. })),
@@ -118,7 +118,10 @@ fn verify_errors_on_a_logic_whose_key_the_verifier_does_not_know() -> anyhow::Re
 
 /// The proved action of an ephemeral token, whose two resources have the trivial logic.
 fn proved_action() -> anyhow::Result<ProvedAction> {
-    let mut partial = prove(common::toolchain(), &common::ephemeral_action(1, 5, 5)?)?;
+    let mut partial = prove(
+        common::circuit_prover(),
+        &common::ephemeral_action(1, 5, 5)?,
+    )?;
     partial
         .actions
         .pop()
