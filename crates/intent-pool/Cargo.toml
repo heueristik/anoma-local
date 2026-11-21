@@ -1,0 +1,16 @@
+[package]
+name = "anoma-intent-pool"
+description = "A mock intent pool: an in-memory list of intents that solvers find by trial decryption"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+
+[dependencies]
+anoma-discovery = { workspace = true }
+anoma-prover = { workspace = true }
+
+[dev-dependencies]
+anoma-arm = { workspace = true }
+anyhow = { workspace = true }
