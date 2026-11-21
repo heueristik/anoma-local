@@ -15,16 +15,16 @@ use anoma_groth16_wrap::{Keys, solidity_verifier};
 use anoma_prover::Transaction;
 use anyhow::{Context, ensure};
 
-/// The settings of the contracts in `contracts/foundry.toml` that change the bytecode.
-const FOUNDRY_TOML: &str = r#"[profile.default]
-solc = "0.8.38"
-auto_detect_solc = false
-evm_version = "osaka"
-optimizer = true
-optimizer_runs = 10_000
-via_ir = true
-bytecode_hash = "none"
-"#;
+/// The settings of the default profile in `contracts/foundry.toml` that change the bytecode.
+const BYTECODE_SETTINGS: [&str; 7] = [
+    "solc",
+    "auto_detect_solc",
+    "evm_version",
+    "optimizer",
+    "optimizer_runs",
+    "via_ir",
+    "bytecode_hash",
+];
 
 /// An anvil chain, which stops when this drops, and the AnomaVerifier on it.
 pub struct Chain {
@@ -91,7 +91,7 @@ fn compile_groth16_verifier(source: &str, work: &Path) -> anyhow::Result<Bytes> 
     let project = work.join("groth16-verifier");
     std::fs::create_dir_all(project.join("src"))
         .with_context(|| format!("create {}", project.display()))?;
-    std::fs::write(project.join("foundry.toml"), FOUNDRY_TOML)?;
+    std::fs::write(project.join("foundry.toml"), bytecode_settings()?)?;
     std::fs::write(project.join("src/Groth16Verifier.sol"), source)?;
 
     let forge = std::env::var_os("FORGE").unwrap_or_else(|| "forge".into());
@@ -114,4 +114,29 @@ fn compile_groth16_verifier(source: &str, work: &Path) -> anyhow::Result<Bytes> 
         .as_str()
         .with_context(|| format!("{} has no bytecode", artifact.display()))?;
     Ok(object.parse()?)
+}
+
+/// A `foundry.toml` with the bytecode settings of the contracts.
+fn bytecode_settings() -> anyhow::Result<String> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../contracts/foundry.toml");
+    let config: toml::Table = std::fs::read_to_string(&path)
+        .with_context(|| format!("read {}", path.display()))?
+        .parse()?;
+    let profile = config
+        .get("profile")
+        .and_then(|profiles| profiles.get("default"))
+        .and_then(toml::Value::as_table)
+        .with_context(|| format!("{} has no default profile", path.display()))?;
+    let mut settings = toml::Table::new();
+    for name in BYTECODE_SETTINGS {
+        let value = profile
+            .get(name)
+            .with_context(|| format!("{} does not set {name}", path.display()))?;
+        settings.insert(name.to_string(), value.clone());
+    }
+    let mut profiles = toml::Table::new();
+    profiles.insert("default".to_string(), settings.into());
+    let mut foundry = toml::Table::new();
+    foundry.insert("profile".to_string(), profiles.into());
+    Ok(toml::to_string(&foundry)?)
 }
