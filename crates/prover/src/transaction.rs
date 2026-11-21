@@ -1,18 +1,14 @@
 //! Partial transactions, which anyone can compose, and the final proof of a balanced transaction.
 
-use std::path::Path;
-
 use anoma_arm::digest::{Action, Deployment};
-use anoma_arm::field::{to_bytes, to_hex};
 use anoma_arm::{Fr, Point, Scalar};
-use anoma_groth16_wrap::{Groth16Proof, Keys, single_party_setup};
 use ark_ec::{AffineRepr, CurveGroup};
 
 use crate::Error;
 use crate::action::{COMPLIANCE, ProvedAction};
 use crate::circuit_prover::{CircuitProver, Target};
-use crate::cli_prover::to_field_bytes;
 use crate::inputs::{self, Field, StepState, circuit_inputs, fields};
+use crate::root_proof_wrapper::{RootProofWrapper, TransactionProof};
 
 /// The circuit of the step proof of the first action.
 pub const FIRST_STEP: &str = "first_step";
@@ -54,16 +50,16 @@ impl PartialTransaction {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Transaction {
     pub actions: Vec<Action>,
-    pub proof: Groth16Proof,
+    pub proof: TransactionProof,
 }
 
 /// Proves a balanced partial transaction for the AnomaVerifier `deployment`: one step proof for each action, the root
-/// proof, and its Groth16 wrap.
+/// proof, and its wrap.
 pub fn prove(
     prover: &impl CircuitProver,
+    wrapper: &impl RootProofWrapper,
     partial: &PartialTransaction,
     deployment: &Deployment,
-    keys: &Keys,
 ) -> Result<Transaction, Error> {
     let (first, rest) = partial.actions.split_first().ok_or(Error::Empty)?;
     if !partial.is_balanced() {
@@ -125,8 +121,9 @@ pub fn prove(
         )?,
         Target::Step,
     )?;
-    let public_inputs: Vec<[u8; 32]> = root.public_inputs.iter().copied().map(to_bytes).collect();
-    let proof = anoma_groth16_wrap::prove(keys, &to_field_bytes(&root.fields), &public_inputs)?;
+    let proof = wrapper
+        .wrap(&root)
+        .map_err(|error| Error::Wrap(Box::new(error)))?;
     Ok(Transaction {
         actions: partial
             .actions
@@ -135,21 +132,6 @@ pub fn prove(
             .collect(),
         proof,
     })
-}
-
-/// Sets up the Groth16 keys of the root circuit in `directory`, once for each root key hash.
-///
-/// One party makes the setup and knows its secret, so it can make false proofs: the keys are for tests only.
-pub fn single_party_wrap_keys(
-    prover: &impl CircuitProver,
-    directory: &Path,
-) -> Result<Keys, Error> {
-    let root = prover.verification_key(ROOT)?;
-    let keys = directory.join(to_hex(root.hash));
-    if keys.exists() {
-        return Ok(Keys::new(keys));
-    }
-    Ok(single_party_setup(&to_field_bytes(&root.fields), &keys)?)
 }
 
 fn action_proofs(proved: &ProvedAction) -> inputs::ActionProofs {

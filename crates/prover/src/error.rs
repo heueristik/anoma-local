@@ -42,6 +42,6 @@ pub enum Error {
     Empty,
     #[error(transparent)]
     Arm(#[from] anoma_arm::Error),
-    #[error(transparent)]
-    Wrap(#[from] anoma_groth16_wrap::Error),
+    #[error("cannot wrap the root proof: {0}")]
+    Wrap(Box<dyn std::error::Error + Send + Sync>),
 }

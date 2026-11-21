@@ -1029,6 +1029,8 @@ dependencies = [
 name = "anoma-groth16-wrap"
 version = "0.1.0"
 dependencies = [
+ "anoma-arm",
+ "anoma-prover",
  "anyhow",
  "thiserror",
 ]

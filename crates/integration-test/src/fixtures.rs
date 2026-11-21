@@ -8,12 +8,11 @@ use anoma_arm::digest::AppData;
 use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
 use anoma_arm::{Fr, Scalar};
 use anoma_discovery::Receiver;
-use anoma_groth16_wrap::Keys;
+use anoma_groth16_wrap::Groth16Wrapper;
 use anoma_intent::{Offer, Payload, Terms};
 use anoma_prover::action::{self, ActionWitness, Logic, Membership, ProvedAction};
 use anoma_prover::circuit_prover::CircuitProver;
 use anoma_prover::cli_prover::CliProver;
-use anoma_prover::transaction;
 use anyhow::Context;
 use tempfile::TempDir;
 
@@ -34,9 +33,9 @@ pub fn circuit_prover() -> &'static CliProver {
         .1
 }
 
-/// The Groth16 keys of the root circuit, which stay in `directory` across runs.
-pub fn wrap_keys(directory: &Path) -> anyhow::Result<Keys> {
-    transaction::single_party_wrap_keys(circuit_prover(), directory)
+/// The Groth16 wrapper of the root proof, whose keys stay in `directory` across runs.
+pub fn groth16_wrapper(directory: &Path) -> anyhow::Result<Groth16Wrapper> {
+    Groth16Wrapper::single_party_setup(circuit_prover(), directory)
         .context("set up the Groth16 keys")
 }
 

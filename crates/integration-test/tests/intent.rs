@@ -26,9 +26,9 @@ const BANANA: u64 = 2;
 async fn execute_settles_the_intent_example_after_several_composition_steps() -> anyhow::Result<()>
 {
     let prover = fixtures::circuit_prover();
-    let keys = fixtures::wrap_keys(&wrap_keys_directory())?;
+    let wrapper = fixtures::groth16_wrapper(&wrap_keys_directory())?;
     let work = TempDir::new()?;
-    let chain = Chain::deploy(&keys, work.path()).await?;
+    let chain = Chain::deploy(&wrapper.keys, work.path()).await?;
     let mut belt = Belt::default();
     let [alice, bob, sally] = [1u64, 2, 3].map(|seed| NullifierKey(Fr::from(seed)));
 
@@ -38,7 +38,7 @@ async fn execute_settles_the_intent_example_after_several_composition_steps() ->
     execute(
         &chain,
         &mut belt,
-        &transaction::prove(prover, &mint, &chain.deployment, &keys)?,
+        &transaction::prove(prover, &wrapper, &mint, &chain.deployment)?,
     )
     .await?;
 
@@ -74,7 +74,7 @@ async fn execute_settles_the_intent_example_after_several_composition_steps() ->
         )?);
     assert!(composed.is_balanced());
 
-    let settlement = transaction::prove(prover, &composed, &chain.deployment, &keys)?;
+    let settlement = transaction::prove(prover, &wrapper, &composed, &chain.deployment)?;
     execute(&chain, &mut belt, &settlement).await?;
     // Alice computes the resource that fills her intent from her terms, with no payload from Sally.
     let alice_fill = alice_intent

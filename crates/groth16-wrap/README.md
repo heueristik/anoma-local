@@ -13,6 +13,8 @@ pub fn solidity_verifier(keys: &Keys) -> Result<String, Error>;
 
 The inputs are the files that bb writes: `vk`, `proof` and `public_inputs`. A field element is 32 bytes, big-endian. `prove` first checks the inner proof natively and returns `Error::Rejected` if it does not verify. `verify` returns `Error::Rejected` for an invalid proof or invalid public inputs.
 
+`Groth16Wrapper` implements the `RootProofWrapper` port of `anoma-prover` with these functions. `Groth16Wrapper::single_party_setup` sets up the keys for the verification key of the root circuit, and `wrap` turns a root proof into the proof that the AnomaVerifier checks.
+
 The Groth16 proof has one public input for each user public input of the inner proof, in the same order. With one user public input, the contract calls `verifyProof(bytes proof, uint256[1] input)`, which reverts for an invalid proof. `Groth16Proof::bytes` is the `proof` argument: A, B and C in the EIP-197 layout (256 bytes), then one gnark commitment and its proof of knowledge (64 bytes each). The commitment is not a public input: the verifier calculates its public value from the commitment with keccak256. The 8 pairing point limbs of bb are not public inputs either: bb 6.0.0 writes them into the `proof` file, and the circuit checks them as private inputs in its final pairing check.
 
 `Keys` is a directory with these files:

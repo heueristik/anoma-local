@@ -5,7 +5,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use anoma_arm::Fr;
-use anoma_arm::field::{from_bytes, to_bytes};
+use anoma_arm::field::{fields_to_bytes, from_bytes};
 
 use crate::circuit_prover::{
     CircuitError, CircuitInputs, CircuitProver, Proof, Target, VerificationKey,
@@ -143,9 +143,9 @@ impl CircuitProver for CliProver {
         create_dir(&directory).map_err(failed)?;
         let [key_file, proof_file, public_inputs_file] =
             ["vk", "proof", "public_inputs"].map(|name| directory.join(name));
-        write(&key_file, &to_field_bytes(&key.fields)).map_err(failed)?;
-        write(&proof_file, &to_field_bytes(proof)).map_err(failed)?;
-        write(&public_inputs_file, &to_field_bytes(public_inputs)).map_err(failed)?;
+        write(&key_file, &fields_to_bytes(&key.fields)).map_err(failed)?;
+        write(&proof_file, &fields_to_bytes(proof)).map_err(failed)?;
+        write(&public_inputs_file, &fields_to_bytes(public_inputs)).map_err(failed)?;
         let verified = check(
             Command::new(&self.bb)
                 .args(["verify", "-t", target_name(target), "-k"])
@@ -200,11 +200,6 @@ impl CliProver {
     fn artifact(&self, circuit: &str) -> PathBuf {
         self.circuits.join("target").join(format!("{circuit}.json"))
     }
-}
-
-/// The fields as bb writes them, and as the Groth16 wrap reads them.
-pub fn to_field_bytes(fields: &[Fr]) -> Vec<u8> {
-    fields.iter().flat_map(|&field| to_bytes(field)).collect()
 }
 
 fn failed(circuit: &str, source: CliError) -> CircuitError {

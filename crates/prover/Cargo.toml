@@ -1,6 +1,6 @@
 [package]
 name = "anoma-prover"
-description = "Proves the actions and transactions of the Anoma local circuits with nargo, bb and the Groth16 wrap"
+description = "Proves the actions and transactions of the Anoma local circuits through a circuit prover and a wrapper of the root proof"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
@@ -13,12 +13,12 @@ slow-tests = []
 
 [dependencies]
 anoma-arm = { workspace = true }
-anoma-groth16-wrap = { workspace = true }
 ark-ec = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
 
 [dev-dependencies]
+anoma-groth16-wrap = { workspace = true }
 anoma-integration-test = { workspace = true }
 anyhow = { workspace = true }

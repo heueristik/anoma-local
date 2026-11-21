@@ -28,9 +28,10 @@ const CHERRY: u64 = 3;
 async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_in_the_pool()
 -> anyhow::Result<()> {
     let prover = fixtures::circuit_prover();
-    let keys = fixtures::wrap_keys(&PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("wrap-keys"))?;
+    let wrapper =
+        fixtures::groth16_wrapper(&PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("wrap-keys"))?;
     let work = TempDir::new()?;
-    let chain = Chain::deploy(&keys, work.path()).await?;
+    let chain = Chain::deploy(&wrapper.keys, work.path()).await?;
     let [alice, bob, carol, sally] = [1u64, 2, 3, 4].map(|seed| NullifierKey(Fr::from(seed)));
     let [alice_keys, bob_keys, carol_keys] = std::array::from_fn(|_| ReceiverKeys::random());
     let solver = solver(sally);
@@ -47,9 +48,9 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
     chain
         .execute(&transaction::prove(
             prover,
+            &wrapper,
             &minted,
             &chain.deployment,
-            &keys,
         )?)
         .await?;
     let belt = belt(&mints);
@@ -103,7 +104,7 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
         "no action shows whether its consumed resource is ephemeral"
     );
 
-    let settlement = transaction::prove(prover, &solution.partial, &chain.deployment, &keys)?;
+    let settlement = transaction::prove(prover, &wrapper, &solution.partial, &chain.deployment)?;
     chain.execute(&settlement).await?;
     for &id in &solution.filled {
         pool.take(id);

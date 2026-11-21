@@ -22,6 +22,9 @@ pub enum Error {
         path: PathBuf,
         source: std::io::Error,
     },
+    /// The circuit prover gives no verification key of the root circuit.
+    #[error(transparent)]
+    Circuit(#[from] anoma_prover::circuit_prover::CircuitError),
     /// The Go library returned a Solidity verifier that is not UTF-8.
     #[error("the Solidity verifier is not UTF-8: {0}")]
     SolidityVerifierEncoding(#[from] FromUtf8Error),

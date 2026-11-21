@@ -12,6 +12,11 @@ pub fn to_bytes<F: PrimeField>(value: F) -> [u8; 32] {
     bytes
 }
 
+/// The 32 big-endian bytes of each field element, one after the other, as bb writes a file of fields.
+pub fn fields_to_bytes(fields: &[Fr]) -> Vec<u8> {
+    fields.iter().flat_map(|&field| to_bytes(field)).collect()
+}
+
 /// The field element of 32 big-endian bytes, if they are smaller than the modulus.
 pub fn from_bytes<F: PrimeField>(bytes: [u8; 32]) -> Result<F, Error> {
     let value = F::from_be_bytes_mod_order(&bytes);

@@ -1,16 +1,19 @@
 //! Wraps a bb 6.0.0 UltraHonk proof (`noir-recursive-no-zk`) into a Groth16 proof over BN254 that the Solidity
 //! verifier of gnark checks. The Go library in `go/` makes the proofs; this crate calls it through its C interface.
+//! [`Groth16Wrapper`] is the wrapper of the root proof of the Anoma prover.
 
 mod error;
 mod ffi;
 mod keys;
 mod proof;
+mod root_proof_wrapper;
 
 use std::path::{Path, PathBuf};
 
 pub use error::Error;
 pub use keys::Keys;
 pub use proof::Groth16Proof;
+pub use root_proof_wrapper::Groth16Wrapper;
 
 /// The length of one encoded field element: 32 bytes, big-endian.
 pub const FIELD_BYTES: usize = 32;
