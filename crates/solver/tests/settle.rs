@@ -1,6 +1,6 @@
-//! The solver settles intents from the intent pool: Alice gives 4 apples for at least 4 bananas, Bob gives 7 bananas
-//! for at least 3 apples, and Carol gives 5 cherries for at least 10 apples, which no one offers. Behind `slow-tests`:
-//! it needs nargo, bb, forge and anvil, and the first run makes the Groth16 setup.
+//! The solver settles intents from the intent pool: Alice gives 4 apples for 4 bananas, Bob gives 7 bananas for 3
+//! apples, and Carol gives 5 cherries for 10 apples, which no one offers. Behind `slow-tests`: it needs nargo, bb,
+//! forge and anvil, and the first run makes the Groth16 setup.
 
 #![cfg(feature = "slow-tests")]
 
@@ -66,7 +66,7 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
             mints[index].created,
             owner,
             belt.path(index)?,
-            fixtures::terms(want, min_quantity, owner)?,
+            fixtures::terms(want, min_quantity, owner, seed)?,
             receiver.receiver(),
             &solver.keys.receiver(),
             seed,

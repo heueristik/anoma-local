@@ -14,8 +14,10 @@ fn payload() -> Payload {
     let terms = Terms {
         want_logic_ref: Fr::from(1u64),
         want_label_ref: Fr::from(2u64),
+        want_value_ref: Fr::from(13u64),
         min_quantity: 4,
         receiver_nullifier_key_commitment: NullifierKey(Fr::from(3u64)).commitment(),
+        want_rand_seed: Fr::from(14u64),
     };
     let nullifier_key = NullifierKey(Fr::from(5u64));
     Payload {

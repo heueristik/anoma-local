@@ -71,13 +71,21 @@ pub fn token(
     })
 }
 
-/// The terms of an intent that wants at least `min_quantity` tokens of the kind `want_label` for `receiver`.
-pub fn terms(want_label: u64, min_quantity: u128, receiver: NullifierKey) -> anyhow::Result<Terms> {
+/// The terms of an intent that wants the token of the kind `want_label` with `min_quantity` and `rand_seed` for
+/// `receiver`.
+pub fn terms(
+    want_label: u64,
+    min_quantity: u128,
+    receiver: NullifierKey,
+    rand_seed: u64,
+) -> anyhow::Result<Terms> {
     Ok(Terms {
         want_logic_ref: token_logic_ref()?,
         want_label_ref: Fr::from(want_label),
+        want_value_ref: Fr::from(0u64),
         min_quantity,
         receiver_nullifier_key_commitment: receiver.commitment(),
+        want_rand_seed: Fr::from(rand_seed),
     })
 }
 

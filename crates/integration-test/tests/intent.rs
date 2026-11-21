@@ -1,6 +1,6 @@
-//! The intent example: Alice gives 4 apples for at least 4 bananas, Bob gives 7 bananas for at least 3 apples, and
-//! Sally solves in several composition steps and keeps the surplus. Behind `slow-tests`: it needs nargo, bb, forge
-//! and anvil, and the first run makes the Groth16 setup, which takes minutes and about 8 GB of memory.
+//! The intent example: Alice gives 4 apples for 4 bananas, Bob gives 7 bananas for 3 apples, and Sally solves in
+//! several composition steps and keeps the surplus. Behind `slow-tests`: it needs nargo, bb, forge and anvil, and the
+//! first run makes the Groth16 setup, which takes minutes and about 8 GB of memory.
 
 #![cfg(feature = "slow-tests")]
 
@@ -52,12 +52,12 @@ async fn execute_settles_the_intent_example_after_several_composition_steps() ->
     assert!(!composed.is_balanced());
     let composed = composed.compose(action::prove(
         toolchain,
-        &alice_intent.fill(&alice_part.resource, token(BANANA, 4, alice, 13)?, 41)?,
+        &alice_intent.fill(&alice_part.resource, 41)?,
     )?);
     assert!(!composed.is_balanced());
     let composed = composed.compose(action::prove(
         toolchain,
-        &bob_intent.fill(&bob_part.resource, token(APPLE, 3, bob, 14)?, 42)?,
+        &bob_intent.fill(&bob_part.resource, 42)?,
     )?);
     assert!(
         !composed.is_balanced(),
@@ -76,30 +76,42 @@ async fn execute_settles_the_intent_example_after_several_composition_steps() ->
 
     let settlement = transaction::prove(toolchain, &composed, &keys)?;
     execute(&chain, &mut belt, &settlement).await?;
+    // Alice computes the resource that fills her intent from her terms, with no payload from Sally.
+    let alice_fill = alice_intent
+        .terms()?
+        .resource(alice_part.resource.nullifier(alice_intent.nullifier_key)?);
+    assert!(
+        settlement
+            .actions
+            .iter()
+            .any(|action| action.commitment == alice_fill.commitment())
+    );
     Ok(())
 }
 
 #[test]
-fn prove_errors_on_a_fill_below_the_minimum_of_the_intent() -> anyhow::Result<()> {
+fn prove_errors_on_a_fill_with_another_quantity_than_the_terms() -> anyhow::Result<()> {
     let alice = NullifierKey(Fr::from(1u64));
     let intent = Intent::new(BANANA, 4, alice, 101);
-    let resource = intent.terms()?.intent(
+    let terms = intent.terms()?;
+    let resource = terms.intent(
         intent_logic_ref()?,
         intent.nullifier_key,
         Fr::from(7u64),
         Fr::from(8u64),
     );
+    let mut witness = intent.fill(&resource, 41)?;
+    witness.created.quantity += 1;
+    witness.consumed_logic =
+        anoma_intent::consumed_logic(&resource, intent.nullifier_key, &terms, &witness.created)?;
 
-    let result = action::prove(
-        fixtures::toolchain(),
-        &intent.fill(&resource, token(BANANA, 3, alice, 13)?, 41)?,
-    );
+    let result = action::prove(fixtures::toolchain(), &witness);
 
     let Err(Error::Tool { output, .. }) = result else {
         anyhow::bail!("expected a failure of nargo, got {result:?}");
     };
     assert!(
-        output.contains("the created quantity is below the minimum"),
+        output.contains("the created quantity is not the quantity of the terms"),
         "{output}"
     );
     Ok(())
@@ -110,6 +122,8 @@ struct Intent {
     want_label: u64,
     min_quantity: u128,
     receiver: NullifierKey,
+    /// Makes the nullifier key of the intent and the random seed of its fill.
+    seed: u64,
     nullifier_key: NullifierKey,
 }
 
@@ -120,17 +134,18 @@ struct Part {
 }
 
 impl Intent {
-    fn new(want_label: u64, min_quantity: u128, receiver: NullifierKey, key_seed: u64) -> Self {
+    fn new(want_label: u64, min_quantity: u128, receiver: NullifierKey, seed: u64) -> Self {
         Self {
             want_label,
             min_quantity,
             receiver,
-            nullifier_key: NullifierKey(Fr::from(key_seed)),
+            seed,
+            nullifier_key: NullifierKey(Fr::from(seed)),
         }
     }
 
     fn terms(&self) -> anyhow::Result<Terms> {
-        fixtures::terms(self.want_label, self.min_quantity, self.receiver)
+        fixtures::terms(self.want_label, self.min_quantity, self.receiver, self.seed)
     }
 
     /// Proves the action that consumes the token at `index` of the belt and creates this intent.
@@ -164,18 +179,12 @@ impl Intent {
         })
     }
 
-    /// The action of the solver that consumes this intent and creates `created` for the receiver.
-    fn fill(
-        &self,
-        intent: &Resource,
-        created: Resource,
-        rcv: u64,
-    ) -> anyhow::Result<ActionWitness> {
+    /// The action of the solver that consumes this intent and creates the resource of its terms for the receiver.
+    fn fill(&self, intent: &Resource, rcv: u64) -> anyhow::Result<ActionWitness> {
         Ok(anoma_intent::fill(
             intent,
             self.nullifier_key,
             &self.terms()?,
-            created,
             Logic::trivial(),
             Scalar::from(rcv),
         )?)

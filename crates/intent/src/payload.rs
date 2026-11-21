@@ -33,7 +33,7 @@ pub struct Payload {
 }
 
 /// The length of an encoded payload.
-const PAYLOAD_BYTES: usize = 3 * 32 + (3 * 32 + 16) + (2 * 32 + 16) + 32 + 2 * 33;
+const PAYLOAD_BYTES: usize = 3 * 32 + (5 * 32 + 16) + (2 * 32 + 16) + 32 + 2 * 33;
 
 /// Why a payload does not describe the actions of its intent.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -53,7 +53,9 @@ impl Payload {
             self.nullifier_key.0,
             self.terms.want_logic_ref,
             self.terms.want_label_ref,
+            self.terms.want_value_ref,
             self.terms.receiver_nullifier_key_commitment,
+            self.terms.want_rand_seed,
         ] {
             bytes.extend_from_slice(&to_bytes(field));
         }
@@ -76,7 +78,9 @@ impl Payload {
         let nullifier_key = NullifierKey(reader.field()?);
         let want_logic_ref = reader.field()?;
         let want_label_ref = reader.field()?;
+        let want_value_ref = reader.field()?;
         let receiver_nullifier_key_commitment = reader.field()?;
+        let want_rand_seed = reader.field()?;
         let min_quantity = u128::from_be_bytes(reader.take()?);
         let offer = Offer {
             logic_ref: reader.field()?,
@@ -95,8 +99,10 @@ impl Payload {
             terms: Terms {
                 want_logic_ref,
                 want_label_ref,
+                want_value_ref,
                 min_quantity,
                 receiver_nullifier_key_commitment,
+                want_rand_seed,
             },
             offer,
             rcv_total,

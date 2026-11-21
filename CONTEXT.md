@@ -33,8 +33,8 @@
 
 ## Intents and solvers
 
-- **Intent**: an ephemeral resource whose label is the hash of its terms. Its creator gives up what the action consumes. The action that consumes the intent must create a resource that fills the terms.
-- **Terms**: the kind and the minimum quantity that the creator of an intent wants, and the nullifier key commitment of the receiver.
+- **Intent**: an ephemeral resource whose label is the hash of its terms. Its creator gives up what the action consumes. The action that consumes the intent must create the resource of its terms.
+- **Terms**: each field of the resource that the creator of an intent wants, except the nonce: the kind, the value ref, the quantity, the nullifier key commitment of the receiver and the random seed. The nonce comes from the nullifier of the intent, so the receiver can compute the resource without a payload.
 - **Payload**: the data that a solver needs to fill an intent: the intent and its nullifier key, the terms, the offer, the rcv sum and the keys of the receiver. The creator encrypts it to the solver.
 - **Discovery**: how a receiver finds its resources, as in Anoma Galileo. The creator adds a discovery blob and the encrypted plaintext of the resource to its app data. The receiver tries to decrypt every discovery blob.
 - **Intent pool**: a list of unbalanced partial transactions. The pool checks nothing. A solver checks the payload and the actions of an intent before it fills it.

@@ -116,24 +116,12 @@ impl Solver {
         Ok(Some(Solution { partial, filled }))
     }
 
-    /// The action that consumes the intent and creates its minimum for its receiver.
+    /// The action that consumes the intent and creates the resource of its terms for its receiver.
     fn fill(&self, payload: &Payload, intent_logic_ref: Fr) -> Result<ActionWitness, Error> {
-        let terms = &payload.terms;
-        let created = Resource {
-            logic_ref: terms.want_logic_ref,
-            label_ref: terms.want_label_ref,
-            value_ref: Fr::from(0u64),
-            quantity: terms.min_quantity,
-            nonce: Fr::from(0u64),
-            nullifier_key_commitment: terms.receiver_nullifier_key_commitment,
-            is_ephemeral: false,
-            rand_seed: Fr::rand(&mut OsRng),
-        };
         let mut witness = anoma_intent::fill(
             &payload.intent(intent_logic_ref),
             payload.nullifier_key,
-            terms,
-            created,
+            &payload.terms,
             self.token_logic.clone(),
             Scalar::rand(&mut OsRng),
         )?;

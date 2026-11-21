@@ -1,5 +1,5 @@
 //! The intent resource: an ephemeral resource whose label is the hash of its terms. Its creator gives up what the
-//! action consumes; the action that consumes the intent must create a resource that fills the terms.
+//! action consumes; the action that consumes the intent must create the resource of its terms.
 
 mod payload;
 
@@ -17,13 +17,16 @@ use serde::Serialize;
 /// The circuit of the intent logic.
 pub const CIRCUIT: &str = "intent_logic";
 
-/// What the creator of an intent wants: at least `min_quantity` of one kind, owned by one nullifier key.
+/// What the creator of an intent wants: each field of the resource that fills it, except the nonce, which comes from
+/// the nullifier of the intent.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Terms {
     pub want_logic_ref: Fr,
     pub want_label_ref: Fr,
+    pub want_value_ref: Fr,
     pub min_quantity: u128,
     pub receiver_nullifier_key_commitment: Fr,
+    pub want_rand_seed: Fr,
 }
 
 impl Terms {
@@ -32,9 +35,25 @@ impl Terms {
         poseidon2_hash(&[
             self.want_logic_ref,
             self.want_label_ref,
+            self.want_value_ref,
             Fr::from(self.min_quantity),
             self.receiver_nullifier_key_commitment,
+            self.want_rand_seed,
         ])
+    }
+
+    /// The resource of these terms for the intent with the nullifier `intent_nullifier`: the resource that fills it.
+    pub fn resource(&self, intent_nullifier: Fr) -> Resource {
+        Resource {
+            logic_ref: self.want_logic_ref,
+            label_ref: self.want_label_ref,
+            value_ref: self.want_value_ref,
+            quantity: self.min_quantity,
+            nonce: created_nonce(intent_nullifier),
+            nullifier_key_commitment: self.receiver_nullifier_key_commitment,
+            is_ephemeral: false,
+            rand_seed: self.want_rand_seed,
+        }
     }
 
     /// An intent with these terms: ephemeral, of quantity 1, with `logic_ref` as the key hash of the intent logic.
@@ -58,20 +77,15 @@ impl Terms {
     }
 }
 
-/// The action that consumes `intent` and creates `created` with `created_logic`, as the terms want. It sets the nonce of
-/// `created`.
+/// The action that consumes `intent` and creates the resource of its terms with `created_logic`.
 pub fn fill(
     intent: &Resource,
     nullifier_key: NullifierKey,
     terms: &Terms,
-    created: Resource,
     created_logic: Logic,
     rcv: Scalar,
 ) -> Result<ActionWitness, Error> {
-    let created = Resource {
-        nonce: created_nonce(intent.nullifier(nullifier_key)?),
-        ..created
-    };
+    let created = terms.resource(intent.nullifier(nullifier_key)?);
     Ok(ActionWitness {
         consumed: *intent,
         consumed_logic: consumed_logic(intent, nullifier_key, terms, &created)?,
@@ -100,8 +114,10 @@ pub fn created_logic() -> Result<Logic, Error> {
     let terms = Terms {
         want_logic_ref: Fr::from(0u64),
         want_label_ref: Fr::from(0u64),
+        want_value_ref: Fr::from(0u64),
         min_quantity: 0,
         receiver_nullifier_key_commitment: Fr::from(0u64),
+        want_rand_seed: Fr::from(0u64),
     };
     consumed_logic(&zero, NullifierKey(Fr::from(0u64)), &terms, &zero)
 }
@@ -120,8 +136,10 @@ pub fn consumed_logic(
         terms: TermsInput {
             want_logic_ref: Field(terms.want_logic_ref),
             want_label_ref: Field(terms.want_label_ref),
+            want_value_ref: Field(terms.want_value_ref),
             min_quantity: Quantity(terms.min_quantity),
             receiver_nullifier_key_commitment: Field(terms.receiver_nullifier_key_commitment),
+            want_rand_seed: Field(terms.want_rand_seed),
         },
         created: created.into(),
     };
@@ -147,6 +165,8 @@ struct Witness {
 struct TermsInput {
     want_logic_ref: Field,
     want_label_ref: Field,
+    want_value_ref: Field,
     min_quantity: Quantity,
     receiver_nullifier_key_commitment: Field,
+    want_rand_seed: Field,
 }
