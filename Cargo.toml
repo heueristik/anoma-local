@@ -17,6 +17,7 @@ anoma-arm = { path = "crates/arm" }
 anoma-bindings = { path = "crates/bindings" }
 anoma-discovery = { path = "crates/discovery" }
 anoma-groth16-wrap = { path = "crates/groth16-wrap" }
+anoma-integration-test = { path = "crates/integration-test" }
 anoma-intent = { path = "crates/intent" }
 anoma-intent-pool = { path = "crates/intent-pool" }
 anoma-prover = { path = "crates/prover" }

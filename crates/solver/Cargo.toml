@@ -7,6 +7,10 @@ edition = { workspace = true }
 license = { workspace = true }
 homepage = { workspace = true }
 
+[features]
+# Runs the tests that prove transactions and execute them on anvil, which take minutes and many gigabytes of memory.
+slow-tests = []
+
 [dependencies]
 anoma-arm = { workspace = true }
 anoma-discovery = { workspace = true }
@@ -20,4 +24,7 @@ thiserror = { workspace = true }
 toml = { workspace = true }
 
 [dev-dependencies]
+anoma-integration-test = { workspace = true }
 anyhow = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
