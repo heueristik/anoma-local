@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.30;
 
+import {Math} from "@openzeppelin-contracts-5.7.0/utils/math/Math.sol";
 import {Poseidon2T4} from "privacy-boost-protocol-62a8140/Poseidon2T4.sol";
 import {LibBit} from "solady-0.1.26/src/utils/LibBit.sol";
 
@@ -82,7 +83,7 @@ library MerkleMountainBelt {
         uint256 validCount = 0;
         if (oldCount != 0) {
             Shape memory oldShape = _shape(oldCount);
-            validCount = _min(
+            validCount = Math.min(
                 _sharedMountainCount(oldShape, count), _sharedMountainCount(oldShape, oldCount + _TYPICAL_APPEND_SIZE)
             );
         }
@@ -292,7 +293,7 @@ library MerkleMountainBelt {
                 uint256 leadingOnes = fromZeros == 0 ? fromMountains : fromMountains - 1 - LibBit.fls(fromZeros);
                 uint256 toOnes = toBits & ((uint256(1) << (fromMountains + 1)) - 1);
                 uint256 leadingZeros = toOnes == 0 ? fromMountains + 1 : fromMountains - LibBit.fls(toOnes);
-                count = _min(leadingOnes, leadingZeros);
+                count = Math.min(leadingOnes, leadingZeros);
             }
         }
     }
@@ -306,13 +307,5 @@ library MerkleMountainBelt {
             uint256 height = position + ((shape.heightBits >> position) & 1);
             slot = 2 * height + 1 - ((shape.rightOfPairBits >> position) & 1);
         }
-    }
-
-    /// @notice Returns the smaller of two numbers.
-    /// @param a The first number.
-    /// @param b The second number.
-    /// @return smaller The smaller number.
-    function _min(uint256 a, uint256 b) private pure returns (uint256 smaller) {
-        smaller = a < b ? a : b;
     }
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.30;
 
+import {Bytes} from "@openzeppelin-contracts-5.7.0/utils/Bytes.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin-contracts-5.7.0/utils/ReentrancyGuardTransient.sol";
 import {IForwarder} from "anoma-forwarder-bases-3.1.1/src/interfaces/IForwarder.sol";
 
@@ -159,7 +160,7 @@ contract AnomaVerifier is IAnomaVerifier, ReentrancyGuardTransient {
             IForwarder(untrustedForwarder).forwardCall({logicRef: carrierLogicRef, input: input});
 
         // forge-lint: disable-next-item(require-revert-in-loop)
-        if (keccak256(actualOutput) != keccak256(expectedOutput)) {
+        if (!Bytes.equal(actualOutput, expectedOutput)) {
             revert ForwarderCallOutputMismatch({expected: expectedOutput, actual: actualOutput});
         }
 
