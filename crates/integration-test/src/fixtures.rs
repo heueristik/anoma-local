@@ -13,8 +13,10 @@ use anoma_intent::{IntentLogic, Offer, Payload, Terms};
 use anoma_prover::action::{self, ActionWitness, Membership, ProvedAction};
 use anoma_prover::circuit_prover::CircuitProver;
 use anoma_prover::cli_prover::CliProver;
-use anoma_prover::resource_logic::{ResourceLogic, TrivialLogic};
+use anoma_prover::resource_logic::ResourceLogic;
+use anoma_token::{TokenLogic, public_key_hash};
 use anyhow::Context;
+use p256::ecdsa::SigningKey;
 use tempfile::TempDir;
 
 /// The circuit prover on the compiled circuits, with one work directory for each test binary.
@@ -40,11 +42,45 @@ pub fn groth16_wrapper(directory: &Path) -> anyhow::Result<Groth16Wrapper> {
         .context("set up the Groth16 keys")
 }
 
-/// The logic ref of the trivial logic, which the token resources of the tests use.
+/// A party of the tests: the nullifier key and the P-256 key of the secret scalar `seed`. A party owns tokens, and an
+/// issuer is a party too.
+#[derive(Clone, Debug)]
+pub struct Party {
+    pub nullifier_key: NullifierKey,
+    pub key: Arc<SigningKey>,
+}
+
+impl Party {
+    pub fn new(seed: u64) -> Self {
+        let mut secret = [0; 32];
+        secret[24..].copy_from_slice(&seed.to_be_bytes());
+        Self {
+            nullifier_key: NullifierKey(Fr::from(seed)),
+            key: Arc::new(
+                SigningKey::from_slice(&secret)
+                    .expect("a nonzero scalar below the group order is a secret key"),
+            ),
+        }
+    }
+
+    /// The value ref of the tokens of the party, and the label ref of the tokens that it issues.
+    pub fn key_hash(&self) -> Fr {
+        public_key_hash(self.key.verifying_key())
+    }
+
+    /// The token logic that signs with the key of the party.
+    pub fn token_logic(&self) -> Arc<dyn ResourceLogic> {
+        Arc::new(TokenLogic {
+            signer: Some(self.key.clone()),
+        })
+    }
+}
+
+/// The logic ref of the token logic.
 pub fn token_logic_ref() -> anyhow::Result<Fr> {
     Ok(circuit_prover()
-        .verification_key(TrivialLogic.circuit())
-        .context("write the key of the trivial logic")?
+        .verification_key(anoma_token::CIRCUIT)
+        .context("write the key of the token logic")?
         .hash)
 }
 
@@ -56,39 +92,38 @@ pub fn intent_logic_ref() -> anyhow::Result<Fr> {
         .hash)
 }
 
-/// A persistent token resource of the kind `label`, owned by `owner`. The action that creates it sets its nonce.
+/// A persistent token of `issuer`, owned by `owner`. The action that creates it sets its nonce.
 pub fn token(
-    label: u64,
+    issuer: &Party,
     quantity: u128,
-    owner: NullifierKey,
+    owner: &Party,
     rand_seed: u64,
 ) -> anyhow::Result<Resource> {
     Ok(Resource {
         logic_ref: token_logic_ref()?,
-        label_ref: Fr::from(label),
-        value_ref: Fr::from(0u64),
+        label_ref: issuer.key_hash(),
+        value_ref: owner.key_hash(),
         quantity,
         nonce: Fr::from(0u64),
-        nullifier_key_commitment: owner.commitment(),
+        nullifier_key_commitment: owner.nullifier_key.commitment(),
         is_ephemeral: false,
         rand_seed: Fr::from(rand_seed),
     })
 }
 
-/// The terms of an intent that wants the token of the kind `want_label` with `want_quantity` and `rand_seed` for
-/// `receiver`.
+/// The terms of an intent that wants `want_quantity` tokens of `want_issuer` with `rand_seed` for `receiver`.
 pub fn terms(
-    want_label: u64,
+    want_issuer: &Party,
     want_quantity: u128,
-    receiver: NullifierKey,
+    receiver: &Party,
     rand_seed: u64,
 ) -> anyhow::Result<Terms> {
     Ok(Terms {
         want_logic_ref: token_logic_ref()?,
-        want_label_ref: Fr::from(want_label),
-        want_value_ref: Fr::from(0u64),
+        want_label_ref: want_issuer.key_hash(),
+        want_value_ref: receiver.key_hash(),
         want_quantity,
-        receiver_nullifier_key_commitment: receiver.commitment(),
+        receiver_nullifier_key_commitment: receiver.nullifier_key.commitment(),
         want_rand_seed: Fr::from(rand_seed),
     })
 }
@@ -120,24 +155,24 @@ pub fn action(
     })
 }
 
-/// An action on the empty commitment tree that creates `created` from an ephemeral resource of its kind and quantity,
-/// which anyone can make with the trivial logic.
-pub fn mint(created: Resource, rcv: u64) -> anyhow::Result<ActionWitness> {
+/// An action on the empty commitment tree that creates `created` from an ephemeral token of its kind and quantity, which
+/// `issuer` signs.
+pub fn mint(issuer: &Party, created: Resource, rcv: u64) -> anyhow::Result<ActionWitness> {
     Ok(ActionWitness::from_ephemeral(
         created,
         created.quantity,
         NullifierKey(Fr::from(rcv)),
-        Arc::new(TrivialLogic),
+        issuer.token_logic(),
         Belt::default().root(),
         Scalar::from(rcv),
     )?)
 }
 
-/// The proved action of a party that gives up `token` for an intent with `terms`. The intent carries the payload for
-/// the solver, encrypted to its keys; `seed` makes the intent key and the rcv of the action.
+/// The proved action of `owner` that gives up `token` for an intent with `terms`. The intent carries the payload for the
+/// solver, encrypted to its keys; `seed` makes the intent key and the rcv of the action.
 pub fn propose(
     token: Resource,
-    owner: NullifierKey,
+    owner: &Party,
     path: MembershipPath,
     terms: Terms,
     receiver: EciesAddress,
@@ -145,7 +180,7 @@ pub fn propose(
     seed: u64,
 ) -> anyhow::Result<Vec<ProvedAction>> {
     let payload = Payload {
-        nonce: created_nonce(token.nullifier(owner)?),
+        nonce: created_nonce(token.nullifier(owner.nullifier_key)?),
         rand_seed: Fr::from(seed),
         nullifier_key: NullifierKey(Fr::from(seed)),
         terms,
@@ -159,8 +194,8 @@ pub fn propose(
     };
     let mut witness = self::action(
         token,
-        Arc::new(TrivialLogic),
-        owner,
+        owner.token_logic(),
+        owner.nullifier_key,
         Membership::Persistent(path),
         payload.intent(intent_logic_ref()?),
         Arc::new(IntentLogic { terms }),

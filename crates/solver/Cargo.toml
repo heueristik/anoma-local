@@ -24,6 +24,7 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 anoma-integration-test = { workspace = true }
+anoma-token = { workspace = true }
 anyhow = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

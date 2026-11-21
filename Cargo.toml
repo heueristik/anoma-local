@@ -21,6 +21,7 @@ anoma-integration-test = { path = "crates/integration-test" }
 anoma-intent = { path = "crates/intent" }
 anoma-intent-pool = { path = "crates/intent-pool" }
 anoma-prover = { path = "crates/prover" }
+anoma-token = { path = "crates/token" }
 anyhow = "1.0.104"
 ark-bn254 = { version = "0.6.0", default-features = false, features = ["scalar_field"] }
 ark-ec = "0.6.0"

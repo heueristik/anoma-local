@@ -13,16 +13,15 @@ use anoma_arm::belt::Belt;
 use anoma_arm::resource::{NullifierKey, Resource};
 use anoma_bindings::conversion::word;
 use anoma_integration_test::chain::Chain;
-use anoma_integration_test::fixtures::{self, action as build_action, intent_logic_ref, token};
+use anoma_integration_test::fixtures::{
+    self, Party, action as build_action, intent_logic_ref, token,
+};
 use anoma_intent::{IntentLogic, Terms};
 use anoma_prover::action::{ActionWitness, Membership};
 use anoma_prover::circuit_prover::CircuitError;
-use anoma_prover::resource_logic::TrivialLogic;
 use anoma_prover::{Error, PartialTransaction, Transaction, action, transaction};
+use anoma_token::TokenLogic;
 use tempfile::TempDir;
-
-const APPLE: u64 = 1;
-const BANANA: u64 = 2;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn execute_settles_the_intent_example_after_several_composition_steps() -> anyhow::Result<()>
@@ -32,10 +31,11 @@ async fn execute_settles_the_intent_example_after_several_composition_steps() ->
     let work = TempDir::new()?;
     let chain = Chain::deploy(&wrapper.keys, work.path()).await?;
     let mut belt = Belt::default();
-    let [alice, bob, sally] = [1u64, 2, 3].map(|seed| NullifierKey(Fr::from(seed)));
+    let [alice, bob, sally] = [1, 2, 3].map(Party::new);
+    let [apple, banana] = issuers();
 
-    let alice_apples = fixtures::mint(token(APPLE, 4, alice, 11)?, 21)?;
-    let bob_bananas = fixtures::mint(token(BANANA, 7, bob, 12)?, 22)?;
+    let alice_apples = fixtures::mint(&apple, token(&apple, 4, &alice, 11)?, 21)?;
+    let bob_bananas = fixtures::mint(&banana, token(&banana, 7, &bob, 12)?, 22)?;
     let mint = action::prove(prover, &alice_apples)?.compose(action::prove(prover, &bob_bananas)?);
     execute(
         &chain,
@@ -45,10 +45,10 @@ async fn execute_settles_the_intent_example_after_several_composition_steps() ->
     .await?;
 
     // Each party proves its own action, which gives up its tokens for an intent, and gives Sally the intent.
-    let alice_intent = Intent::new(BANANA, 4, alice, 101);
-    let alice_part = alice_intent.give_up(&belt, 0, alice_apples.created, alice, 31)?;
-    let bob_intent = Intent::new(APPLE, 3, bob, 102);
-    let bob_part = bob_intent.give_up(&belt, 1, bob_bananas.created, bob, 32)?;
+    let alice_intent = Intent::new(&banana, 4, &alice, 101);
+    let alice_part = alice_intent.give_up(&belt, 0, alice_apples.created, &alice, 31)?;
+    let bob_intent = Intent::new(&apple, 3, &bob, 102);
+    let bob_part = bob_intent.give_up(&belt, 1, bob_bananas.created, &bob, 32)?;
 
     let composed = alice_part.partial.compose(bob_part.partial);
     assert!(!composed.is_balanced());
@@ -68,11 +68,11 @@ async fn execute_settles_the_intent_example_after_several_composition_steps() ->
     let composed = composed
         .compose(action::prove(
             prover,
-            &take_surplus(token(APPLE, 1, sally, 15)?, belt.root(), 51)?,
+            &take_surplus(token(&apple, 1, &sally, 15)?, belt.root(), 51)?,
         )?)
         .compose(action::prove(
             prover,
-            &take_surplus(token(BANANA, 3, sally, 16)?, belt.root(), 52)?,
+            &take_surplus(token(&banana, 3, &sally, 16)?, belt.root(), 52)?,
         )?);
     assert!(composed.is_balanced());
 
@@ -93,8 +93,8 @@ async fn execute_settles_the_intent_example_after_several_composition_steps() ->
 
 #[test]
 fn prove_errors_on_a_fill_with_another_quantity_than_the_terms() -> anyhow::Result<()> {
-    let alice = NullifierKey(Fr::from(1u64));
-    let intent = Intent::new(BANANA, 4, alice, 101);
+    let [_, banana] = issuers();
+    let intent = Intent::new(&banana, 4, &Party::new(1), 101);
     let terms = intent.terms()?;
     let resource = terms.intent(
         intent_logic_ref()?,
@@ -119,9 +119,9 @@ fn prove_errors_on_a_fill_with_another_quantity_than_the_terms() -> anyhow::Resu
 
 /// An intent of a party: what it wants, and the nullifier key that it gives to the solver.
 struct Intent {
-    want_label: u64,
+    want_issuer: Party,
     want_quantity: u128,
-    receiver: NullifierKey,
+    receiver: Party,
     /// Makes the nullifier key of the intent and the random seed of its fill.
     seed: u64,
     nullifier_key: NullifierKey,
@@ -134,11 +134,11 @@ struct Part {
 }
 
 impl Intent {
-    fn new(want_label: u64, want_quantity: u128, receiver: NullifierKey, seed: u64) -> Self {
+    fn new(want_issuer: &Party, want_quantity: u128, receiver: &Party, seed: u64) -> Self {
         Self {
-            want_label,
+            want_issuer: want_issuer.clone(),
             want_quantity,
-            receiver,
+            receiver: receiver.clone(),
             seed,
             nullifier_key: NullifierKey(Fr::from(seed)),
         }
@@ -146,9 +146,9 @@ impl Intent {
 
     fn terms(&self) -> anyhow::Result<Terms> {
         fixtures::terms(
-            self.want_label,
+            &self.want_issuer,
             self.want_quantity,
-            self.receiver,
+            &self.receiver,
             self.seed,
         )
     }
@@ -159,7 +159,7 @@ impl Intent {
         belt: &Belt,
         index: usize,
         token: Resource,
-        owner: NullifierKey,
+        owner: &Party,
         rcv: u64,
     ) -> anyhow::Result<Part> {
         let intent = self.terms()?.intent(
@@ -170,8 +170,8 @@ impl Intent {
         );
         let witness = build_action(
             token,
-            Arc::new(TrivialLogic),
-            owner,
+            owner.token_logic(),
+            owner.nullifier_key,
             Membership::Persistent(belt.path(index)?),
             intent,
             Arc::new(IntentLogic {
@@ -193,7 +193,7 @@ impl Intent {
             intent,
             self.nullifier_key,
             &self.terms()?,
-            Arc::new(TrivialLogic),
+            Arc::new(TokenLogic::default()),
             root,
             Scalar::from(rcv),
         )?)
@@ -207,7 +207,7 @@ fn take_surplus(created: Resource, root: Fr, rcv: u64) -> anyhow::Result<ActionW
         created,
         0,
         NullifierKey(Fr::from(rcv)),
-        Arc::new(TrivialLogic),
+        Arc::new(TokenLogic::default()),
         root,
         Scalar::from(rcv),
     )?)
@@ -238,6 +238,11 @@ async fn execute(chain: &Chain, belt: &mut Belt, transaction: &Transaction) -> a
         );
     }
     Ok(())
+}
+
+/// The issuers of apples and bananas.
+fn issuers() -> [Party; 2] {
+    [1001, 1002].map(Party::new)
 }
 
 fn wrap_keys_directory() -> PathBuf {

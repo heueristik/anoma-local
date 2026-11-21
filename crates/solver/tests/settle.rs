@@ -10,22 +10,18 @@ use std::sync::Arc;
 use anoma_arm::Fr;
 use anoma_arm::action::Action;
 use anoma_arm::belt::{Belt, MembershipPath};
-use anoma_arm::resource::{NullifierKey, RESOURCE_BYTES, Resource};
+use anoma_arm::resource::{RESOURCE_BYTES, Resource};
 use anoma_discovery::{Discovery, EciesDiscovery, EciesSecretKeys};
 use anoma_integration_test::chain::Chain;
-use anoma_integration_test::fixtures::{self, token};
+use anoma_integration_test::fixtures::{self, Party, token};
 use anoma_intent_pool::{IntentPool, MemoryIntentId, MemoryIntentPool, PooledIntent};
 use anoma_prover::action::{self, ActionWitness, ProvedAction};
-use anoma_prover::resource_logic::TrivialLogic;
 use anoma_prover::transaction;
 use anoma_solver::Solver;
 use anoma_solver::cp_sat::CpSatMatcher;
+use anoma_token::TokenLogic;
 use anyhow::Context;
 use tempfile::TempDir;
-
-const APPLE: u64 = 1;
-const BANANA: u64 = 2;
-const CHERRY: u64 = 3;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_in_the_pool()
@@ -35,14 +31,15 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
         fixtures::groth16_wrapper(&PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("wrap-keys"))?;
     let work = TempDir::new()?;
     let chain = Chain::deploy(&wrapper.keys, work.path()).await?;
-    let [alice, bob, carol, sally] = [1u64, 2, 3, 4].map(|seed| NullifierKey(Fr::from(seed)));
+    let [alice, bob, carol, sally] = [1u64, 2, 3, 4].map(Party::new);
+    let [apple, banana, cherry] = issuers();
     let [alice_keys, bob_keys, carol_keys] = std::array::from_fn(|_| EciesSecretKeys::random());
-    let solver = solver(sally);
+    let solver = solver(&sally);
 
     let mints = [
-        fixtures::mint(token(APPLE, 4, alice, 11)?, 21)?,
-        fixtures::mint(token(BANANA, 7, bob, 12)?, 22)?,
-        fixtures::mint(token(CHERRY, 5, carol, 13)?, 23)?,
+        fixtures::mint(&apple, token(&apple, 4, &alice, 11)?, 21)?,
+        fixtures::mint(&banana, token(&banana, 7, &bob, 12)?, 22)?,
+        fixtures::mint(&cherry, token(&cherry, 5, &carol, 13)?, 23)?,
     ];
     let mut minted = action::prove(prover, &mints[0])?;
     for mint in &mints[1..] {
@@ -64,8 +61,8 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
         .submit(propose(
             &mints[0],
             belt.path(0)?,
-            alice,
-            (BANANA, 4),
+            &alice,
+            (&banana, 4),
             &alice_keys,
             &solver,
             101,
@@ -75,8 +72,8 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
         .submit(propose(
             &mints[1],
             belt.path(1)?,
-            bob,
-            (APPLE, 3),
+            &bob,
+            (&apple, 3),
             &bob_keys,
             &solver,
             102,
@@ -86,8 +83,8 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
         .submit(propose(
             &mints[2],
             belt.path(2)?,
-            carol,
-            (APPLE, 10),
+            &carol,
+            (&apple, 10),
             &carol_keys,
             &solver,
             103,
@@ -119,21 +116,22 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
         pool.remove(id).await?;
     }
     assert_eq!(ids(&pool).await?, [carol_intent]);
-    let label = |label: u64| Fr::from(label);
     assert_eq!(
         received(&settlement.actions, &alice_keys),
-        [(label(BANANA), 4, alice.commitment())]
+        [received_token(&banana, 4, &alice)]
     );
     assert_eq!(
         received(&settlement.actions, &bob_keys),
-        [(label(APPLE), 3, bob.commitment())]
+        [received_token(&apple, 3, &bob)]
     );
+    let mut surplus = [
+        received_token(&apple, 1, &sally),
+        received_token(&banana, 3, &sally),
+    ];
+    surplus.sort();
     assert_eq!(
         received(&settlement.actions, &solver.secret_keys),
-        [
-            (label(APPLE), 1, sally.commitment()),
-            (label(BANANA), 3, sally.commitment())
-        ],
+        surplus,
         "the solver keeps the surplus"
     );
     assert_eq!(received(&settlement.actions, &carol_keys), []);
@@ -142,19 +140,20 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
 
 #[test]
 fn solve_fills_a_copied_intent_once() -> anyhow::Result<()> {
-    let [alice, bob, sally] = [1u64, 2, 4].map(|seed| NullifierKey(Fr::from(seed)));
-    let solver = solver(sally);
+    let [alice, bob, sally] = [1u64, 2, 4].map(Party::new);
+    let [apple, banana, _] = issuers();
+    let solver = solver(&sally);
     let (apples, wanted_bananas, bananas, wanted_apples) = (4, 3, 7, 3);
     let mints = [
-        fixtures::mint(token(APPLE, apples, alice, 11)?, 21)?,
-        fixtures::mint(token(BANANA, bananas, bob, 12)?, 22)?,
+        fixtures::mint(&apple, token(&apple, apples, &alice, 11)?, 21)?,
+        fixtures::mint(&banana, token(&banana, bananas, &bob, 12)?, 22)?,
     ];
     let belt = belt(&mints);
     let alice_actions = propose(
         &mints[0],
         belt.path(0)?,
-        alice,
-        (BANANA, wanted_bananas),
+        &alice,
+        (&banana, wanted_bananas),
         &EciesSecretKeys::random(),
         &solver,
         101,
@@ -162,8 +161,8 @@ fn solve_fills_a_copied_intent_once() -> anyhow::Result<()> {
     let bob_actions = propose(
         &mints[1],
         belt.path(1)?,
-        bob,
-        (APPLE, wanted_apples),
+        &bob,
+        (&apple, wanted_apples),
         &EciesSecretKeys::random(),
         &solver,
         102,
@@ -188,21 +187,22 @@ fn solve_fills_a_copied_intent_once() -> anyhow::Result<()> {
 
 #[test]
 fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
-    let [alice, bob, dave, sally] = [1u64, 2, 5, 4].map(|seed| NullifierKey(Fr::from(seed)));
-    let solver = solver(sally);
+    let [alice, bob, dave, sally] = [1u64, 2, 5, 4].map(Party::new);
+    let [apple, banana, _] = issuers();
+    let solver = solver(&sally);
     let (apples, bananas) = (4, 7);
     let (alice_wants, bob_wants, dave_wants) = (4, 3, 3);
     let mints = [
-        fixtures::mint(token(APPLE, apples, alice, 11)?, 21)?,
-        fixtures::mint(token(BANANA, bananas, bob, 12)?, 22)?,
-        fixtures::mint(token(APPLE, apples, dave, 14)?, 24)?,
+        fixtures::mint(&apple, token(&apple, apples, &alice, 11)?, 21)?,
+        fixtures::mint(&banana, token(&banana, bananas, &bob, 12)?, 22)?,
+        fixtures::mint(&apple, token(&apple, apples, &dave, 14)?, 24)?,
     ];
     let belt = belt(&mints);
     let alice_actions = propose(
         &mints[0],
         belt.path(0)?,
-        alice,
-        (BANANA, alice_wants),
+        &alice,
+        (&banana, alice_wants),
         &EciesSecretKeys::random(),
         &solver,
         101,
@@ -210,8 +210,8 @@ fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
     let bob_actions = propose(
         &mints[1],
         belt.path(1)?,
-        bob,
-        (APPLE, bob_wants),
+        &bob,
+        (&apple, bob_wants),
         &EciesSecretKeys::random(),
         &solver,
         102,
@@ -219,8 +219,8 @@ fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
     let mut dave_actions = propose(
         &mints[2],
         belt.path(2)?,
-        dave,
-        (BANANA, dave_wants),
+        &dave,
+        (&banana, dave_wants),
         &EciesSecretKeys::random(),
         &solver,
         105,
@@ -248,16 +248,16 @@ fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
 
 #[test]
 fn solve_skips_an_intent_whose_payload_is_for_another_solver() -> anyhow::Result<()> {
-    let [alice, bob, dave, sally, trent] =
-        [1u64, 2, 5, 4, 6].map(|seed| NullifierKey(Fr::from(seed)));
-    let other_solver = solver(trent);
-    let solver = solver(sally);
+    let [alice, bob, dave, sally, trent] = [1u64, 2, 5, 4, 6].map(Party::new);
+    let [apple, banana, _] = issuers();
+    let other_solver = solver(&trent);
+    let solver = solver(&sally);
     let (apples, bananas) = (4, 7);
     let (alice_wants, bob_wants, dave_wants) = (4, 3, 3);
     let mints = [
-        fixtures::mint(token(APPLE, apples, alice, 11)?, 21)?,
-        fixtures::mint(token(BANANA, bananas, bob, 12)?, 22)?,
-        fixtures::mint(token(APPLE, apples, dave, 14)?, 24)?,
+        fixtures::mint(&apple, token(&apple, apples, &alice, 11)?, 21)?,
+        fixtures::mint(&banana, token(&banana, bananas, &bob, 12)?, 22)?,
+        fixtures::mint(&apple, token(&apple, apples, &dave, 14)?, 24)?,
     ];
     let belt = belt(&mints);
     let intents = [
@@ -266,8 +266,8 @@ fn solve_skips_an_intent_whose_payload_is_for_another_solver() -> anyhow::Result
             propose(
                 &mints[0],
                 belt.path(0)?,
-                alice,
-                (BANANA, alice_wants),
+                &alice,
+                (&banana, alice_wants),
                 &EciesSecretKeys::random(),
                 &solver,
                 101,
@@ -278,8 +278,8 @@ fn solve_skips_an_intent_whose_payload_is_for_another_solver() -> anyhow::Result
             propose(
                 &mints[1],
                 belt.path(1)?,
-                bob,
-                (APPLE, bob_wants),
+                &bob,
+                (&apple, bob_wants),
                 &EciesSecretKeys::random(),
                 &solver,
                 102,
@@ -290,8 +290,8 @@ fn solve_skips_an_intent_whose_payload_is_for_another_solver() -> anyhow::Result
             propose(
                 &mints[2],
                 belt.path(2)?,
-                dave,
-                (BANANA, dave_wants),
+                &dave,
+                (&banana, dave_wants),
                 &EciesSecretKeys::random(),
                 &other_solver,
                 105,
@@ -325,15 +325,20 @@ async fn ids(pool: &MemoryIntentPool) -> anyhow::Result<Vec<MemoryIntentId>> {
         .collect())
 }
 
-/// A solver that trades tokens of the trivial logic and keeps its surplus for `owner`.
-fn solver(owner: NullifierKey) -> Solver<EciesDiscovery, CpSatMatcher> {
+/// The issuers of apples, bananas and cherries.
+fn issuers() -> [Party; 3] {
+    [1001, 1002, 1003].map(Party::new)
+}
+
+/// A solver that trades tokens of the token logic and keeps its surplus for `owner`.
+fn solver(owner: &Party) -> Solver<EciesDiscovery, CpSatMatcher> {
     Solver {
         discovery: EciesDiscovery,
         secret_keys: EciesSecretKeys::random(),
         matcher: CpSatMatcher,
-        owner,
-        owner_value_ref: Fr::from(0u64),
-        token_logic: Arc::new(TrivialLogic),
+        owner: owner.nullifier_key,
+        owner_value_ref: owner.key_hash(),
+        token_logic: Arc::new(TokenLogic::default()),
     }
 }
 
@@ -349,13 +354,13 @@ fn belt(mints: &[ActionWitness]) -> Belt {
     belt
 }
 
-/// The proved action of `owner` that gives up the token of `mint` at `path` for an intent that wants `want`, a label
+/// The proved action of `owner` that gives up the token of `mint` at `path` for an intent that wants `want`, an issuer
 /// and a quantity, for the keys of `receiver`. The payload is for the keys of the solver.
 fn propose(
     mint: &ActionWitness,
     path: MembershipPath,
-    owner: NullifierKey,
-    (want_label, want_quantity): (u64, u128),
+    owner: &Party,
+    (want_issuer, want_quantity): (&Party, u128),
     receiver: &EciesSecretKeys,
     solver: &Solver<EciesDiscovery, CpSatMatcher>,
     seed: u64,
@@ -364,14 +369,24 @@ fn propose(
         mint.created,
         owner,
         path,
-        fixtures::terms(want_label, want_quantity, owner, seed)?,
+        fixtures::terms(want_issuer, want_quantity, owner, seed)?,
         receiver.address(),
         &solver.secret_keys.address(),
         seed,
     )
 }
 
-/// The label, quantity and owner of each created resource whose plaintext the keys decrypt, sorted.
+/// The label ref, quantity and nullifier key commitment of `quantity` tokens of `issuer` for `owner`.
+fn received_token(issuer: &Party, quantity: u128, owner: &Party) -> (Fr, u128, Fr) {
+    (
+        issuer.key_hash(),
+        quantity,
+        owner.nullifier_key.commitment(),
+    )
+}
+
+/// The label ref, quantity and nullifier key commitment of each created resource whose plaintext the keys decrypt,
+/// sorted.
 fn received(actions: &[Action], keys: &EciesSecretKeys) -> Vec<(Fr, u128, Fr)> {
     let mut received: Vec<(Fr, u128, Fr)> = actions
         .iter()
