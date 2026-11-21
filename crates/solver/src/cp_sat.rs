@@ -30,14 +30,14 @@ impl Matcher for CpSatMatcher {
         let modeled = within_max_sum(orders);
 
         let mut model = CpModelBuilder::default();
-        let fill: Vec<_> = modeled.iter().map(|_| model.new_bool_var()).collect();
+        let is_filled: Vec<_> = modeled.iter().map(|_| model.new_bool_var()).collect();
         let kinds: BTreeSet<KindRef> = modeled
             .iter()
             .flat_map(|order| [orders[order.index].give, orders[order.index].want])
             .collect();
         for kind in kinds {
             let mut balance = LinearExpr::default();
-            for (modeled, &filled) in modeled.iter().zip(&fill) {
+            for (modeled, &filled) in modeled.iter().zip(&is_filled) {
                 let order = &orders[modeled.index];
                 if order.give == kind {
                     balance += (modeled.give, filled);
@@ -49,7 +49,8 @@ impl Matcher for CpSatMatcher {
             model.add_ge(balance, 0);
         }
         model.maximize(
-            fill.iter()
+            is_filled
+                .iter()
                 .map(|&filled| (1, filled))
                 .collect::<LinearExpr>(),
         );
@@ -61,7 +62,7 @@ impl Matcher for CpSatMatcher {
         }
         let chosen: Vec<usize> = modeled
             .iter()
-            .zip(&fill)
+            .zip(&is_filled)
             .filter(|(_, filled)| filled.solution_value(&response))
             .map(|(order, _)| order.index)
             .collect();
@@ -82,7 +83,7 @@ impl Matcher for CpSatMatcher {
 }
 
 /// An order in the model: its index, and its quantities as integers of CP-SAT.
-struct Modeled {
+struct ModeledOrder {
     index: usize,
     give: i64,
     want: i64,
@@ -90,7 +91,7 @@ struct Modeled {
 
 /// The orders that the model holds, in the order of `orders`. It takes them smallest first, so that large orders cannot
 /// keep small ones out, and skips each order that would raise a sum of a kind above `MAX_SUM`.
-fn within_max_sum(orders: &[Order]) -> Vec<Modeled> {
+fn within_max_sum(orders: &[Order]) -> Vec<ModeledOrder> {
     let mut by_size: Vec<usize> = (0..orders.len()).collect();
     by_size.sort_by_key(|&index| orders[index].give_quantity.max(orders[index].want_quantity));
     let mut gives = BTreeMap::new();
@@ -99,21 +100,25 @@ fn within_max_sum(orders: &[Order]) -> Vec<Modeled> {
     for index in by_size {
         let order = &orders[index];
         let (Some((give, give_sum)), Some((want, want_sum))) = (
-            raised(&gives, order.give, order.give_quantity),
-            raised(&wants, order.want, order.want_quantity),
+            try_add_to_sum(&gives, order.give, order.give_quantity),
+            try_add_to_sum(&wants, order.want, order.want_quantity),
         ) else {
             continue;
         };
         gives.insert(order.give, give_sum);
         wants.insert(order.want, want_sum);
-        modeled.push(Modeled { index, give, want });
+        modeled.push(ModeledOrder { index, give, want });
     }
     modeled.sort_by_key(|order| order.index);
     modeled
 }
 
 /// The quantity as an integer of CP-SAT and the sum of its kind with it, if that sum is at most `MAX_SUM`.
-fn raised(sums: &BTreeMap<KindRef, i64>, kind: KindRef, quantity: u128) -> Option<(i64, i64)> {
+fn try_add_to_sum(
+    sums: &BTreeMap<KindRef, i64>,
+    kind: KindRef,
+    quantity: u128,
+) -> Option<(i64, i64)> {
     let quantity = i64::try_from(quantity).ok()?;
     let sum = sums
         .get(&kind)

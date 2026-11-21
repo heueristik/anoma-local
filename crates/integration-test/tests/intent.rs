@@ -79,7 +79,7 @@ async fn execute_settles_the_intent_example_after_several_composition_steps() ->
     // Alice computes the resource that fills her intent from her terms, with no payload from Sally.
     let alice_fill = alice_intent
         .terms()?
-        .resource(alice_part.resource.nullifier(alice_intent.nullifier_key)?);
+        .filling_resource(alice_part.resource.nullifier(alice_intent.nullifier_key)?);
     assert!(
         settlement
             .actions

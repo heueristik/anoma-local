@@ -45,8 +45,8 @@ impl Terms {
         )
     }
 
-    /// The resource of these terms for the intent with the nullifier `intent_nullifier`: the resource that fills it.
-    pub fn resource(&self, intent_nullifier: Fr) -> Resource {
+    /// The resource that fills the intent of these terms whose nullifier is `intent_nullifier`.
+    pub fn filling_resource(&self, intent_nullifier: Fr) -> Resource {
         Resource {
             logic_ref: self.want_logic_ref,
             label_ref: self.want_label_ref,
@@ -90,7 +90,7 @@ pub fn fill(
     commitment_tree_root: Fr,
     rcv: Scalar,
 ) -> Result<ActionWitness, Error> {
-    let created = terms.resource(intent.nullifier(nullifier_key)?);
+    let created = terms.filling_resource(intent.nullifier(nullifier_key)?);
     Ok(ActionWitness {
         consumed: *intent,
         consumed_logic: consumed_logic(intent, nullifier_key, terms, &created)?,

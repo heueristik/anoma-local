@@ -9,7 +9,8 @@ use std::fs;
 use std::sync::OnceLock;
 
 use anoma_groth16_wrap::{
-    Error, FIELD_BYTES, Groth16Proof, Keys, prove, single_party_setup, solidity_verifier, verify,
+    Error, FIELD_BYTES, Groth16Proof, WrapKeys, prove, single_party_setup, solidity_verifier,
+    verify,
 };
 use anyhow::{Context, anyhow};
 
@@ -17,7 +18,7 @@ use anyhow::{Context, anyhow};
 const FIRST_SUMCHECK_FIELD: usize = 8 + 8 * 4;
 
 struct Wrap {
-    keys: Keys,
+    keys: WrapKeys,
     inner_proof: Vec<u8>,
     inner_public_inputs: Vec<[u8; FIELD_BYTES]>,
     proof: Groth16Proof,

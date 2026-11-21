@@ -11,7 +11,7 @@ mod root_proof_wrapper;
 use std::path::{Path, PathBuf};
 
 pub use error::Error;
-pub use keys::Keys;
+pub use keys::WrapKeys;
 pub use proof::Groth16Proof;
 pub use root_proof_wrapper::Groth16Wrapper;
 
@@ -22,7 +22,7 @@ pub const FIELD_BYTES: usize = 32;
 /// must not exist. The keys go to a `.partial` folder first, so that a stopped setup leaves no `directory`.
 ///
 /// The caller knows the setup secret and can make false proofs, so the keys are for tests only.
-pub fn single_party_setup(inner_verifying_key: &[u8], directory: &Path) -> Result<Keys, Error> {
+pub fn single_party_setup(inner_verifying_key: &[u8], directory: &Path) -> Result<WrapKeys, Error> {
     let mut partial = directory.as_os_str().to_owned();
     partial.push(".partial");
     let partial = PathBuf::from(partial);
@@ -32,19 +32,22 @@ pub fn single_party_setup(inner_verifying_key: &[u8], directory: &Path) -> Resul
             source,
         })?;
     }
-    ffi::single_party_setup(inner_verifying_key, Keys::new(&partial).encoded_directory())?;
+    ffi::single_party_setup(
+        inner_verifying_key,
+        WrapKeys::new(&partial).encoded_directory(),
+    )?;
     std::fs::rename(&partial, directory).map_err(|source| Error::Io {
         path: directory.to_path_buf(),
         source,
     })?;
-    Ok(Keys::new(directory))
+    Ok(WrapKeys::new(directory))
 }
 
 /// Wraps an inner proof and its user public inputs, as bb writes them, into a Groth16 proof.
 ///
 /// Returns [`Error::Rejected`] if the inner proof does not verify against the inner verifying key of `keys`.
 pub fn prove(
-    keys: &Keys,
+    keys: &WrapKeys,
     inner_proof: &[u8],
     public_inputs: &[[u8; FIELD_BYTES]],
 ) -> Result<Groth16Proof, Error> {
@@ -64,7 +67,7 @@ pub fn prove(
 }
 
 /// Checks a Groth16 proof against its public inputs. Returns [`Error::Rejected`] if the proof is invalid.
-pub fn verify(keys: &Keys, proof: &Groth16Proof) -> Result<(), Error> {
+pub fn verify(keys: &WrapKeys, proof: &Groth16Proof) -> Result<(), Error> {
     ffi::verify(
         keys.encoded_directory(),
         &proof.bytes,
@@ -73,7 +76,7 @@ pub fn verify(keys: &Keys, proof: &Groth16Proof) -> Result<(), Error> {
 }
 
 /// Returns the source of the Solidity verifier for `keys`.
-pub fn solidity_verifier(keys: &Keys) -> Result<String, Error> {
+pub fn solidity_verifier(keys: &WrapKeys) -> Result<String, Error> {
     Ok(String::from_utf8(ffi::solidity_verifier(
         keys.encoded_directory(),
     )?)?)

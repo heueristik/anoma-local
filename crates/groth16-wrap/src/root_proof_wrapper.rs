@@ -8,12 +8,12 @@ use anoma_prover::circuit_prover::{CircuitProver, Proof};
 use anoma_prover::root_proof_wrapper::{RootProofWrapper, TransactionProof};
 use anoma_prover::transaction::ROOT;
 
-use crate::{Error, FIELD_BYTES, Groth16Proof, Keys, prove, single_party_setup, verify};
+use crate::{Error, FIELD_BYTES, Groth16Proof, WrapKeys, prove, single_party_setup, verify};
 
 /// Wraps root proofs with the keys of the wrapper circuit for the verification key of the root circuit.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Groth16Wrapper {
-    pub keys: Keys,
+    pub keys: WrapKeys,
 }
 
 impl RootProofWrapper for Groth16Wrapper {
@@ -50,7 +50,7 @@ impl Groth16Wrapper {
         let keys = directory.join(to_hex(root.hash));
         if keys.exists() {
             return Ok(Self {
-                keys: Keys::new(keys),
+                keys: WrapKeys::new(keys),
             });
         }
         Ok(Self {

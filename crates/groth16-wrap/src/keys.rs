@@ -4,11 +4,11 @@ use std::path::PathBuf;
 ///
 /// The keys stay on disk: the proving key alone has about 1.5 GB.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Keys {
+pub struct WrapKeys {
     directory: PathBuf,
 }
 
-impl Keys {
+impl WrapKeys {
     /// Refers to the keys in `directory`. A function that uses the keys reports a missing file.
     pub fn new(directory: impl Into<PathBuf>) -> Self {
         Self {

@@ -6,7 +6,7 @@
 mod common;
 
 use anoma_arm::digest::{Deployment, action_digest};
-use anoma_groth16_wrap::{Groth16Wrapper, Keys};
+use anoma_groth16_wrap::{Groth16Wrapper, WrapKeys};
 use anoma_prover::{Error, action, transaction};
 use anyhow::Context;
 
@@ -53,7 +53,7 @@ fn prove_errors_on_an_unbalanced_transaction() -> anyhow::Result<()> {
     let prover = common::circuit_prover();
     let partial = action::prove(prover, &common::ephemeral_action(1, 5, 3)?)?;
     let wrapper = Groth16Wrapper {
-        keys: Keys::new(common::wrap_keys_directory()),
+        keys: WrapKeys::new(common::wrap_keys_directory()),
     };
 
     let result = transaction::prove(prover, &wrapper, &partial, &DEPLOYMENT);

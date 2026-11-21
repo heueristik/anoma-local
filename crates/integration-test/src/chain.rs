@@ -12,7 +12,7 @@ use alloy::signers::local::PrivateKeySigner;
 use anoma_arm::digest::Deployment;
 use anoma_bindings::conversion;
 use anoma_bindings::generated::anoma_verifier::AnomaVerifier::{self, AnomaVerifierInstance};
-use anoma_groth16_wrap::{Keys, solidity_verifier};
+use anoma_groth16_wrap::{WrapKeys, solidity_verifier};
 use anoma_prover::Transaction;
 use anyhow::{Context, ensure};
 
@@ -38,7 +38,7 @@ pub struct Chain {
 impl Chain {
     /// Spawns anvil, compiles the Solidity verifier of `keys` with forge in `work`, and deploys it and the
     /// AnomaVerifier.
-    pub async fn deploy(keys: &Keys, work: &Path) -> anyhow::Result<Self> {
+    pub async fn deploy(keys: &WrapKeys, work: &Path) -> anyhow::Result<Self> {
         let anvil = Anvil::new()
             .args(["--hardfork", "osaka"])
             .try_spawn()
