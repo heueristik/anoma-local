@@ -2,11 +2,11 @@
 //! key and the shared point, and AES-256-GCM encrypts the message.
 
 use aes_gcm::aead::Aead;
-use aes_gcm::{Aes256Gcm, KeyInit};
+use aes_gcm::{AeadCore, Aes256Gcm, KeyInit};
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use k256::sha2::{Digest, Sha256};
 use k256::{AffinePoint, ProjectivePoint};
-use rand_core::{OsRng, RngCore};
+use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 
 /// The errors of encryption and decryption.
@@ -22,9 +22,12 @@ pub enum Error {
     SharedPoint,
 }
 
-/// A secp256k1 secret key.
+/// A secp256k1 secret key, with its public key, which each trial decryption hashes.
 #[derive(Clone, PartialEq, Eq)]
-pub struct SecretKey(k256::SecretKey);
+pub struct SecretKey {
+    key: k256::SecretKey,
+    public_key: PublicKey,
+}
 
 /// A secp256k1 public key.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,16 +35,25 @@ pub struct PublicKey(AffinePoint);
 
 impl SecretKey {
     pub fn random() -> Self {
-        Self(k256::SecretKey::random(&mut OsRng))
+        Self::new(k256::SecretKey::random(&mut OsRng))
     }
 
     /// The secret key of 32 big-endian bytes, if they are a nonzero scalar below the group order.
     pub fn from_bytes(bytes: [u8; 32]) -> Option<Self> {
-        k256::SecretKey::from_bytes(&bytes.into()).ok().map(Self)
+        k256::SecretKey::from_bytes(&bytes.into())
+            .ok()
+            .map(Self::new)
     }
 
     pub fn public_key(&self) -> PublicKey {
-        PublicKey(*self.0.public_key().as_affine())
+        self.public_key
+    }
+
+    fn new(key: k256::SecretKey) -> Self {
+        Self {
+            public_key: PublicKey(*key.public_key().as_affine()),
+            key,
+        }
     }
 }
 
@@ -73,10 +85,9 @@ struct Envelope {
 /// Encrypts a message to a receiver with a new sender key and a random nonce.
 pub fn encrypt(message: &[u8], receiver: &PublicKey) -> Result<Vec<u8>, Error> {
     let sender = SecretKey::random();
-    let shared = ProjectivePoint::from(receiver.0) * sender.0.to_nonzero_scalar().as_ref();
+    let shared = ProjectivePoint::from(receiver.0) * sender.key.to_nonzero_scalar().as_ref();
     let cipher_key = aes(receiver, shared)?;
-    let mut nonce = [0; 12];
-    OsRng.fill_bytes(&mut nonce);
+    let nonce: [u8; 12] = Aes256Gcm::generate_nonce(&mut OsRng).into();
     let cipher = cipher_key
         .encrypt(&nonce.into(), message)
         .map_err(|_| Error::Encryption(message.len()))?;
@@ -90,8 +101,9 @@ pub fn encrypt(message: &[u8], receiver: &PublicKey) -> Result<Vec<u8>, Error> {
 /// Decrypts a ciphertext with the receiver's secret key.
 pub fn decrypt(ciphertext: &[u8], receiver: &SecretKey) -> Result<Vec<u8>, Error> {
     let envelope: Envelope = bincode::deserialize(ciphertext)?;
-    let shared = ProjectivePoint::from(envelope.sender.0) * receiver.0.to_nonzero_scalar().as_ref();
-    aes(&receiver.public_key(), shared)?
+    let shared =
+        ProjectivePoint::from(envelope.sender.0) * receiver.key.to_nonzero_scalar().as_ref();
+    aes(&receiver.public_key, shared)?
         .decrypt(&envelope.nonce.into(), envelope.cipher.as_slice())
         .map_err(|_| Error::Decryption)
 }
