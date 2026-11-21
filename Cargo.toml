@@ -11,6 +11,8 @@ homepage = "https://anoma.net/"
 
 [workspace.dependencies]
 acir_field = "1.0.0"
+anoma-arm = { path = "crates/arm" }
+anoma-groth16-wrap = { path = "crates/groth16-wrap" }
 anyhow = "1.0.104"
 ark-bn254 = { version = "0.6.0", default-features = false, features = ["scalar_field"] }
 ark-ec = "0.6.0"
@@ -18,5 +20,8 @@ ark-ff = "0.6.0"
 ark-grumpkin = "0.6.0"
 bn254_blackbox_solver = "1.0.0"
 hex = "0.4.3"
+serde = { version = "1.0.229", features = ["derive"] }
 sha2 = "0.11.1"
+tempfile = "3.27.0"
 thiserror = "2.0.21"
+toml = "1.2.1"
