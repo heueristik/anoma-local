@@ -1,4 +1,4 @@
-//! The port to an intent pool, which holds intents until the chain executes a transaction that fills them, and a pool
+//! The trait of an intent pool, which holds intents until the chain executes a transaction that fills them, and a pool
 //! in memory. An intent is the proved actions of an unbalanced partial transaction. A pool checks no proof and no
 //! payload; a solver checks what it takes.
 

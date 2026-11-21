@@ -1,4 +1,4 @@
-//! The port to a matcher, which chooses the intents to fill, and the orders and matchings that it takes and gives.
+//! The trait of a matcher, which chooses the intents to fill, and the orders and matchings that it takes and gives.
 
 use std::collections::BTreeMap;
 

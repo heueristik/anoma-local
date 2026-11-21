@@ -1,4 +1,4 @@
-//! Proves the actions and transactions of the Anoma local circuits through two ports: a circuit prover and a wrapper
+//! Proves the actions and transactions of the Anoma local circuits through two traits: a circuit prover and a wrapper
 //! of the root proof.
 //!
 //! An action becomes a partial transaction of one action. Partial transactions compose, and a balanced one gets a

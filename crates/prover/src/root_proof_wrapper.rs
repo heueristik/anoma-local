@@ -1,4 +1,4 @@
-//! The port to a wrapper of the root proof: it turns the root proof of a transaction into the proof that the
+//! The trait of a wrapper of the root proof: it turns the root proof of a transaction into the proof that the
 //! AnomaVerifier checks.
 
 use anoma_arm::Fr;

@@ -11,14 +11,35 @@ The terms are in [CONTEXT.md](CONTEXT.md).
 | `contracts/` | The `AnomaVerifier` contract, its Poseidon2 commitment tree and the action digest |
 | `circuits/` | The Noir circuits: `compliance`, the logics `trivial_logic` and `intent_logic`, `first_step`, `next_step` and `root` |
 | `crates/arm` | The resource machine outside the circuits: resources, kinds, deltas, the commitment tree and the action digest |
-| `crates/groth16-wrap` | The Groth16 wrap of the root proof, through a Go library on gnark |
-| `crates/prover` | Proves actions and transactions with nargo, bb and the Groth16 wrap |
-| `crates/discovery` | The port to a discovery scheme, and the scheme of Anoma Galileo: ECIES on secp256k1 and trial decryption |
+| `crates/groth16-wrap` | The Groth16 wrap of a bb proof through a Go library on gnark, and the wrapper of the root proof |
+| `crates/prover` | Proves actions and transactions through the `CircuitProver` and `RootProofWrapper` traits, and the circuit prover on nargo and bb |
+| `crates/discovery` | The `Discovery` trait, and the scheme of Anoma Galileo: ECIES on secp256k1 and trial decryption |
 | `crates/intent` | The intent resource, the inputs of its logic, and the payload for the solver |
-| `crates/intent-pool` | The port to an intent pool, and a pool in memory |
-| `crates/solver` | A solver of intents, the port to a matcher, and a matcher with the CP-SAT solver of OR-Tools |
+| `crates/intent-pool` | The `IntentPool` trait, and a pool in memory |
+| `crates/solver` | A solver of intents, the `Matcher` trait, and a matcher with the CP-SAT solver of OR-Tools |
 | `crates/bindings` | The Rust bindings of the `AnomaVerifier` |
 | `crates/integration-test` | The fixtures and the anvil chain of the end-to-end tests |
+
+## Components
+
+The resource machine in `crates/arm`, the provers of actions and transactions, the intent and the solver use the components below only through their traits. An implementation can change without a change to the code that uses it.
+
+| Trait | Module | Implementation | Job |
+| --- | --- | --- | --- |
+| `CircuitProver` | `anoma_prover::circuit_prover` | `CliProver`, which runs nargo and bb | Gives the verification key of a circuit, proves it, and verifies proofs |
+| `RootProofWrapper` | `anoma_prover::root_proof_wrapper` | `Groth16Wrapper` in `crates/groth16-wrap` | Turns the root proof into the proof that the AnomaVerifier checks |
+| `Discovery` | `anoma_discovery` | `EciesDiscovery` | Makes a created resource discoverable for its receiver, and finds the resources of a receiver |
+| `IntentPool` | `anoma_intent_pool` | `MemoryIntentPool` | Holds the intents for the solvers until the chain executes their fills |
+| `Matcher` | `anoma_solver::matching` | `CpSatMatcher` | Chooses the intents that balance together |
+
+Each implementation must keep these constraints:
+
+- A circuit prover gives bb 6.0.0 UltraHonk proofs and keys: the step circuits verify the leaf proofs, and the hash of the key of a logic is its logic ref.
+- A root proof wrapper needs its own verifier contract, which the AnomaVerifier gets at its deployment.
+- The address of a discovery scheme is in the intent payload, so a new scheme also changes the payloads.
+- The methods of an intent pool are async, so that a pool on a network can wait for its answers. The pool checks no proof; the solver does.
+
+The chain is the ABI of the AnomaVerifier. `crates/bindings` and the `Chain` of the end-to-end tests are its client.
 
 ## How a transaction is proved
 

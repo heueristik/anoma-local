@@ -1,4 +1,4 @@
-//! The port to a prover of the Noir circuits: it gives the verification key of a circuit, proves it, and verifies
+//! The trait of a prover of the Noir circuits: it gives the verification key of a circuit, proves it, and verifies
 //! proofs.
 
 use anoma_arm::Fr;

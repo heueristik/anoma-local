@@ -1,6 +1,6 @@
 [package]
 name = "anoma-intent-pool"
-description = "The port to an intent pool, which holds intents for the solvers, and a pool in memory"
+description = "The trait of an intent pool, which holds intents for the solvers, and a pool in memory"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
