@@ -6,6 +6,7 @@ use anoma_arm::{Fr, Point};
 use serde::{Serialize, Serializer};
 
 use crate::Error;
+use crate::circuit_prover::CircuitInputs;
 
 /// A field element, which nargo reads as a hexadecimal string.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -25,6 +26,14 @@ impl Serialize for Quantity {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.collect_str(&self.0)
     }
+}
+
+/// The inputs of `circuit` by their Noir names.
+pub fn circuit_inputs(circuit: &str, inputs: &impl Serialize) -> Result<CircuitInputs, Error> {
+    CircuitInputs::try_from(inputs).map_err(|source| Error::Inputs {
+        circuit: circuit.to_string(),
+        source,
+    })
 }
 
 pub fn fields(values: &[Fr]) -> Vec<Field> {
@@ -153,7 +162,7 @@ pub(crate) struct Logic<'a> {
     pub action_tree_root: Field,
     pub app_data_hash: Field,
     #[serde(flatten)]
-    pub witness: &'a toml::Table,
+    pub witness: &'a CircuitInputs,
 }
 
 #[derive(Serialize)]

@@ -1060,7 +1060,6 @@ dependencies = [
  "anoma-prover",
  "serde",
  "thiserror",
- "toml",
 ]
 
 [[package]]

@@ -13,7 +13,7 @@ use anoma_intent::Payload;
 use anoma_intent_pool::{IntentId, IntentPool};
 use anoma_prover::PartialTransaction;
 use anoma_prover::action::{self, ActionWitness, Logic};
-use anoma_prover::toolchain::Toolchain;
+use anoma_prover::circuit_prover::{CircuitError, CircuitProver};
 use ark_ff::UniformRand;
 use rand_core::OsRng;
 
@@ -23,6 +23,8 @@ use crate::matching::{KindRef, Order};
 pub enum Error {
     #[error(transparent)]
     Matching(#[from] matching::Error),
+    #[error(transparent)]
+    Circuit(#[from] CircuitError),
     #[error(transparent)]
     Prove(#[from] anoma_prover::Error),
     #[error(transparent)]
@@ -56,13 +58,13 @@ impl Solver {
     /// resources show `commitment_tree_root`, a recent root of the chain. Returns `None` if it fills none.
     pub fn solve(
         &self,
-        toolchain: &Toolchain,
+        prover: &impl CircuitProver,
         pool: &IntentPool,
         commitment_tree_root: Fr,
     ) -> Result<Option<Solution>, Error> {
         let logic_keys = [
-            toolchain.verification_key(&self.token_logic.circuit)?,
-            toolchain.verification_key(anoma_intent::CIRCUIT)?,
+            prover.verification_key(&self.token_logic.circuit)?,
+            prover.verification_key(anoma_intent::CIRCUIT)?,
         ];
         let (token_logic_ref, intent_logic_ref) = (logic_keys[0].hash, logic_keys[1].hash);
         let mut nullifiers = BTreeSet::new();
@@ -94,7 +96,7 @@ impl Solver {
                     .partial
                     .actions
                     .iter()
-                    .all(|proved| proved.verify(toolchain, &logic_keys).is_ok())
+                    .all(|proved| proved.verify(prover, &logic_keys).is_ok())
             })
             .filter(|candidate| has_fresh_nullifiers(&candidate.partial, &mut nullifiers))
             .collect();
@@ -123,7 +125,7 @@ impl Solver {
             rcv_total: Scalar::from(0u64),
         };
         for witness in &witnesses {
-            partial = partial.compose(action::prove(toolchain, witness)?);
+            partial = partial.compose(action::prove(prover, witness)?);
         }
 
         let mut filled = Vec::new();

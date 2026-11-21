@@ -6,7 +6,7 @@ use anoma_arm::{Fr, Scalar};
 use anoma_discovery::ReceiverKeys;
 use anoma_intent::{Mismatch, Offer, Payload, Terms};
 use anoma_prover::action::{LogicProof, ProvedAction};
-use anoma_prover::toolchain::Proof;
+use anoma_prover::circuit_prover::Proof;
 
 const INTENT_LOGIC_REF: u64 = 9;
 

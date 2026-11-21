@@ -15,6 +15,7 @@ use anoma_integration_test::chain::Chain;
 use anoma_integration_test::fixtures::{self, action as build_action, intent_logic_ref, token};
 use anoma_intent::Terms;
 use anoma_prover::action::{ActionWitness, Logic, Membership};
+use anoma_prover::circuit_prover::CircuitError;
 use anoma_prover::{Error, PartialTransaction, Transaction, action, transaction};
 use tempfile::TempDir;
 
@@ -107,12 +108,12 @@ fn prove_errors_on_a_fill_with_another_quantity_than_the_terms() -> anyhow::Resu
 
     let result = action::prove(fixtures::toolchain(), &witness);
 
-    let Err(Error::Tool { output, .. }) = result else {
-        anyhow::bail!("expected a failure of nargo, got {result:?}");
+    let Err(Error::Circuit(CircuitError::Unsatisfied { reason, .. })) = result else {
+        anyhow::bail!("expected inputs that do not satisfy the intent logic, got {result:?}");
     };
     assert!(
-        output.contains("the created quantity is not the quantity of the terms"),
-        "{output}"
+        reason.contains("the created quantity is not the quantity of the terms"),
+        "{reason}"
     );
     Ok(())
 }

@@ -11,7 +11,7 @@ use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
 use anoma_arm::{Fr, Scalar};
 use anoma_prover::Error;
 use anoma_prover::action::{ActionWitness, Logic, Membership};
-use anoma_prover::inputs::{self, Field, Quantity};
+use anoma_prover::inputs::{self, Field, Quantity, circuit_inputs};
 use serde::Serialize;
 
 /// The circuit of the intent logic.
@@ -152,10 +152,7 @@ pub fn consumed_logic(
     };
     Ok(Logic {
         circuit: CIRCUIT.to_string(),
-        witness: toml::Table::try_from(witness).map_err(|source| Error::Inputs {
-            circuit: CIRCUIT.to_string(),
-            source,
-        })?,
+        witness: circuit_inputs(CIRCUIT, &witness)?,
     })
 }
 

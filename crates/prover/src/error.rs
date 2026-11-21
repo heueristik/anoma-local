@@ -1,28 +1,12 @@
-use std::path::PathBuf;
-
 use thiserror::Error;
+
+use crate::circuit_prover::CircuitError;
 
 /// The errors of proving.
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("{command} failed for {circuit}: {output}")]
-    Tool {
-        command: &'static str,
-        circuit: String,
-        output: String,
-    },
-    #[error("cannot run {program}: {source}")]
-    Spawn {
-        program: PathBuf,
-        source: std::io::Error,
-    },
-    #[error("cannot read or write {path}: {source}")]
-    Io {
-        path: PathBuf,
-        source: std::io::Error,
-    },
-    #[error("{path} is not a bb file of the expected shape: {reason}")]
-    Format { path: PathBuf, reason: String },
+    #[error(transparent)]
+    Circuit(#[from] CircuitError),
     #[error("cannot write the inputs of {circuit}: {source}")]
     Inputs {
         circuit: String,

@@ -8,8 +8,8 @@ use anoma_arm::kind::Kind;
 use anoma_arm::resource::{NullifierKey, Resource, action_tree_root, created_nonce};
 use anoma_arm::{Fr, Point, Scalar};
 
-use crate::inputs::{self, Field};
-use crate::toolchain::{Proof, Target, Toolchain, VerificationKey};
+use crate::circuit_prover::{CircuitInputs, CircuitProver, Proof, Target, VerificationKey};
+use crate::inputs::{self, Field, circuit_inputs};
 use crate::{Error, PartialTransaction};
 
 /// The circuit of the compliance unit.
@@ -20,7 +20,7 @@ pub const COMPLIANCE: &str = "compliance";
 pub struct Logic {
     pub circuit: String,
     /// The inputs of the circuit besides `tag`, `is_consumed`, `action_tree_root` and `app_data_hash`.
-    pub witness: toml::Table,
+    pub witness: CircuitInputs,
 }
 
 impl Logic {
@@ -28,7 +28,7 @@ impl Logic {
     pub fn trivial() -> Self {
         Self {
             circuit: "trivial_logic".to_string(),
-            witness: toml::Table::new(),
+            witness: CircuitInputs::new(),
         }
     }
 }
@@ -116,14 +116,14 @@ impl ProvedAction {
     /// carry one of `logic_keys`, the keys of the logics that the caller knows.
     pub fn verify(
         &self,
-        toolchain: &Toolchain,
+        prover: &impl CircuitProver,
         logic_keys: &[VerificationKey],
     ) -> Result<(), Error> {
         let action = &self.action;
         let (delta_x, delta_y) = coordinates(self.delta);
-        toolchain.verify(
+        prover.verify(
             COMPLIANCE,
-            &toolchain.verification_key(COMPLIANCE)?,
+            &prover.verification_key(COMPLIANCE)?,
             &self.compliance_proof.fields,
             &[
                 action.nullifier,
@@ -165,7 +165,7 @@ impl ProvedAction {
                 .ok_or_else(|| Error::UnknownLogic {
                     logic_ref: to_hex(logic_ref),
                 })?;
-            toolchain.verify(
+            prover.verify(
                 &to_hex(logic_ref),
                 key,
                 &logic_proof.proof.fields,
@@ -178,7 +178,10 @@ impl ProvedAction {
 }
 
 /// Proves an action, as a partial transaction of one action.
-pub fn prove(toolchain: &Toolchain, witness: &ActionWitness) -> Result<PartialTransaction, Error> {
+pub fn prove(
+    prover: &impl CircuitProver,
+    witness: &ActionWitness,
+) -> Result<PartialTransaction, Error> {
     let nullifier = witness.consumed.nullifier(witness.nullifier_key)?;
     let (path, commitment_tree_root) = match (&witness.membership, witness.consumed.is_ephemeral) {
         (Membership::Persistent(path), false) => (path, path.root(witness.consumed.commitment())),
@@ -206,30 +209,33 @@ pub fn prove(toolchain: &Toolchain, witness: &ActionWitness) -> Result<PartialTr
         witness.rcv,
     );
     let (delta_x, delta_y) = inputs::point(delta);
-    let compliance_proof = toolchain.prove(
+    let compliance_proof = prover.prove(
         COMPLIANCE,
-        &inputs::Compliance {
-            nullifier: Field(nullifier),
-            consumed_logic_ref: Field(action.consumed_logic_ref),
-            commitment_tree_root: Field(action.commitment_tree_root),
-            commitment: Field(commitment),
-            created_logic_ref: Field(action.created_logic_ref),
-            delta_x,
-            delta_y,
-            consumed: (&witness.consumed).into(),
-            nullifier_key: Field(witness.nullifier_key.0),
-            path: path.try_into()?,
-            consumed_kind: consumed_kind.into(),
-            created: (&witness.created).into(),
-            created_kind: created_kind.into(),
-            rcv: witness.rcv.into(),
-        },
+        &circuit_inputs(
+            COMPLIANCE,
+            &inputs::Compliance {
+                nullifier: Field(nullifier),
+                consumed_logic_ref: Field(action.consumed_logic_ref),
+                commitment_tree_root: Field(action.commitment_tree_root),
+                commitment: Field(commitment),
+                created_logic_ref: Field(action.created_logic_ref),
+                delta_x,
+                delta_y,
+                consumed: (&witness.consumed).into(),
+                nullifier_key: Field(witness.nullifier_key.0),
+                path: path.try_into()?,
+                consumed_kind: consumed_kind.into(),
+                created: (&witness.created).into(),
+                created_kind: created_kind.into(),
+                rcv: witness.rcv.into(),
+            },
+        )?,
         Target::Leaf,
     )?;
 
     let root = action_tree_root(nullifier, commitment);
     let consumed_logic_proof = prove_logic(
-        toolchain,
+        prover,
         &witness.consumed_logic,
         witness.consumed.logic_ref,
         inputs::Logic {
@@ -241,7 +247,7 @@ pub fn prove(toolchain: &Toolchain, witness: &ActionWitness) -> Result<PartialTr
         },
     )?;
     let created_logic_proof = prove_logic(
-        toolchain,
+        prover,
         &witness.created_logic,
         witness.created.logic_ref,
         inputs::Logic {
@@ -267,12 +273,12 @@ pub fn prove(toolchain: &Toolchain, witness: &ActionWitness) -> Result<PartialTr
 
 /// Proves a resource logic, after it checks that the logic ref of the resource is the key hash of the logic.
 fn prove_logic(
-    toolchain: &Toolchain,
+    prover: &impl CircuitProver,
     logic: &Logic,
     logic_ref: Fr,
     inputs: inputs::Logic,
 ) -> Result<LogicProof, Error> {
-    let verification_key = toolchain.verification_key(&logic.circuit)?;
+    let verification_key = prover.verification_key(&logic.circuit)?;
     if verification_key.hash != logic_ref {
         return Err(Error::LogicRef {
             circuit: logic.circuit.clone(),
@@ -280,7 +286,11 @@ fn prove_logic(
             key_hash: to_hex(verification_key.hash),
         });
     }
-    let proof = toolchain.prove(&logic.circuit, &inputs, Target::Leaf)?;
+    let proof = prover.prove(
+        &logic.circuit,
+        &circuit_inputs(&logic.circuit, &inputs)?,
+        Target::Leaf,
+    )?;
     Ok(LogicProof {
         verification_key,
         proof,

@@ -3,7 +3,7 @@ use anoma_arm::{Fr, Point};
 use anoma_discovery::{ReceiverKeys, app_data};
 use anoma_intent_pool::IntentPool;
 use anoma_prover::action::{LogicProof, ProvedAction};
-use anoma_prover::toolchain::Proof;
+use anoma_prover::circuit_prover::Proof;
 
 /// An action whose created resource has the app data, with empty proofs: the pool checks no proof.
 fn action(created_app_data: AppData) -> ProvedAction {

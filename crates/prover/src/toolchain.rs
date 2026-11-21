@@ -1,4 +1,4 @@
-//! The runs of nargo and bb on the compiled circuits. bb writes each file as 32-byte big-endian fields.
+//! The circuit prover that runs nargo and bb on the compiled circuits. bb writes each file as 32-byte big-endian fields.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -6,39 +6,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use anoma_arm::Fr;
 use anoma_arm::field::{from_bytes, to_bytes};
-use serde::Serialize;
 
-use crate::Error;
-
-/// The bb target of a proof: a leaf proof hides its witness, a step or root proof does not.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Target {
-    Leaf,
-    Step,
-}
-
-impl Target {
-    fn name(self) -> &'static str {
-        match self {
-            Self::Leaf => "noir-recursive",
-            Self::Step => "noir-recursive-no-zk",
-        }
-    }
-}
-
-/// The verification key of a circuit, as the fields that a recursive verifier takes, and its hash.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct VerificationKey {
-    pub fields: Vec<Fr>,
-    pub hash: Fr,
-}
-
-/// A proof, as the fields that a recursive verifier takes, and its public inputs.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Proof {
-    pub fields: Vec<Fr>,
-    pub public_inputs: Vec<Fr>,
-}
+use crate::circuit_prover::{
+    CircuitError, CircuitInputs, CircuitProver, Proof, Target, VerificationKey,
+};
 
 /// The nargo and bb binaries, the compiled circuit workspace, and a directory for the files of the runs.
 #[derive(Clone, Debug)]
@@ -49,8 +20,150 @@ pub struct Toolchain {
     pub work: PathBuf,
 }
 
+/// Why a run of nargo or bb fails, other than a failed check of the inputs or of a proof.
+#[derive(Debug, thiserror::Error)]
+pub enum CliError {
+    #[error("{command} failed: {output}")]
+    Tool {
+        command: &'static str,
+        output: String,
+    },
+    #[error("cannot run {program}: {source}")]
+    Spawn {
+        program: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("cannot read or write {path}: {source}")]
+    Io {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("{path} is not a bb file of the expected shape: {reason}")]
+    Format { path: PathBuf, reason: String },
+    #[error("cannot write the inputs: {0}")]
+    Inputs(#[from] toml::ser::Error),
+}
+
 /// Makes the names of the files of each run unique in the process.
 static RUN: AtomicU64 = AtomicU64::new(0);
+
+impl CircuitProver for Toolchain {
+    /// Writes the verification key of a circuit on the first call, and reads it.
+    fn verification_key(&self, circuit: &str) -> Result<VerificationKey, CircuitError> {
+        let failed = |source| failed(circuit, source);
+        let directory = self.key_directory(circuit).map_err(failed)?;
+        let hash_file = directory.join("vk_hash");
+        let hash = read_fields(&hash_file).map_err(failed)?;
+        let [hash] = hash[..] else {
+            return Err(failed(format_error(
+                &hash_file,
+                format!("{} fields, expected 1", hash.len()),
+            )));
+        };
+        Ok(VerificationKey {
+            fields: read_fields(&directory.join("vk")).map_err(failed)?,
+            hash,
+        })
+    }
+
+    /// Solves the circuit with nargo, proves it with bb, and checks the proof. A failed run keeps its files.
+    fn prove(
+        &self,
+        circuit: &str,
+        inputs: &CircuitInputs,
+        target: Target,
+    ) -> Result<Proof, CircuitError> {
+        let failed = |source| failed(circuit, source);
+        let run = run_name(circuit);
+        let directory = self.work.join("proofs").join(&run);
+        create_dir(&directory).map_err(failed)?;
+
+        let prover_file = directory.join("inputs");
+        let text = toml::to_string(inputs)
+            .map_err(CliError::from)
+            .map_err(failed)?;
+        write(&prover_file.with_extension("toml"), text.as_bytes()).map_err(failed)?;
+        let executed = check(
+            Command::new(&self.nargo)
+                .arg("execute")
+                .arg("--program-dir")
+                .arg(&self.circuits)
+                .args(["--package", circuit, "--silence-warnings", "--prover-name"])
+                .arg(&prover_file)
+                .arg(&run),
+        )
+        .map_err(failed)?;
+        if let Err(reason) = executed {
+            return Err(CircuitError::Unsatisfied {
+                circuit: circuit.to_string(),
+                reason,
+            });
+        }
+        let solved = self.circuits.join("target").join(format!("{run}.gz"));
+        let witness = directory.join("witness.gz");
+        std::fs::rename(&solved, &witness)
+            .map_err(|source| CliError::Io {
+                path: solved,
+                source,
+            })
+            .map_err(failed)?;
+
+        let key_directory = self.key_directory(circuit).map_err(failed)?;
+        run_tool(
+            "bb prove",
+            Command::new(&self.bb)
+                .args(["prove", "--verify", "-t", target_name(target), "-b"])
+                .arg(self.artifact(circuit))
+                .arg("-w")
+                .arg(&witness)
+                .arg("-k")
+                .arg(key_directory.join("vk"))
+                .arg("-o")
+                .arg(&directory),
+        )
+        .map_err(failed)?;
+        let proof = Proof {
+            fields: read_fields(&directory.join("proof")).map_err(failed)?,
+            public_inputs: read_fields(&directory.join("public_inputs")).map_err(failed)?,
+        };
+        remove_dir(&directory).map_err(failed)?;
+        Ok(proof)
+    }
+
+    fn verify(
+        &self,
+        circuit: &str,
+        key: &VerificationKey,
+        proof: &[Fr],
+        public_inputs: &[Fr],
+        target: Target,
+    ) -> Result<(), CircuitError> {
+        let failed = |source| failed(circuit, source);
+        let directory = self.work.join("verify").join(run_name(circuit));
+        create_dir(&directory).map_err(failed)?;
+        let [key_file, proof_file, public_inputs_file] =
+            ["vk", "proof", "public_inputs"].map(|name| directory.join(name));
+        write(&key_file, &to_field_bytes(&key.fields)).map_err(failed)?;
+        write(&proof_file, &to_field_bytes(proof)).map_err(failed)?;
+        write(&public_inputs_file, &to_field_bytes(public_inputs)).map_err(failed)?;
+        let verified = check(
+            Command::new(&self.bb)
+                .args(["verify", "-t", target_name(target), "-k"])
+                .arg(&key_file)
+                .arg("-p")
+                .arg(&proof_file)
+                .arg("-i")
+                .arg(&public_inputs_file),
+        );
+        remove_dir(&directory).map_err(failed)?;
+        verified
+            .map_err(failed)?
+            .map_err(|reason| CircuitError::Rejected {
+                circuit: circuit.to_string(),
+                reason,
+            })
+    }
+}
 
 impl Toolchain {
     /// Takes nargo and bb from the `NARGO` and `BB` variables, or else from the `PATH`.
@@ -66,141 +179,16 @@ impl Toolchain {
         }
     }
 
-    /// Writes the verification key of a circuit on the first call, and reads it.
-    pub fn verification_key(&self, circuit: &str) -> Result<VerificationKey, Error> {
-        let directory = self.key_directory(circuit)?;
-        let hash_file = directory.join("vk_hash");
-        let hash = read_fields(&hash_file)?;
-        let [hash] = hash[..] else {
-            return Err(format_error(
-                &hash_file,
-                format!("{} fields, expected 1", hash.len()),
-            ));
-        };
-        Ok(VerificationKey {
-            fields: read_fields(&directory.join("vk"))?,
-            hash,
-        })
-    }
-
-    /// The hash of the verification key of a circuit, which is the logic ref of a resource logic.
-    pub fn key_hash(&self, circuit: &str) -> Result<Fr, Error> {
-        Ok(self.verification_key(circuit)?.hash)
-    }
-
-    /// Solves the circuit for the inputs, proves it, and checks the proof. A failed run keeps its files.
-    pub fn prove(
-        &self,
-        circuit: &str,
-        inputs: &impl Serialize,
-        target: Target,
-    ) -> Result<Proof, Error> {
-        let run = format!(
-            "{circuit}-{}-{}",
-            std::process::id(),
-            RUN.fetch_add(1, Ordering::Relaxed)
-        );
-        let directory = self.work.join("proofs").join(&run);
-        create_dir(&directory)?;
-
-        let prover_file = directory.join("inputs");
-        let text = toml::to_string(inputs).map_err(|source| Error::Inputs {
-            circuit: circuit.to_string(),
-            source,
-        })?;
-        write(&prover_file.with_extension("toml"), text.as_bytes())?;
-        self.run(
-            "nargo execute",
-            circuit,
-            Command::new(&self.nargo)
-                .arg("execute")
-                .arg("--program-dir")
-                .arg(&self.circuits)
-                .args(["--package", circuit, "--silence-warnings", "--prover-name"])
-                .arg(&prover_file)
-                .arg(&run),
-        )?;
-        let solved = self.circuits.join("target").join(format!("{run}.gz"));
-        let witness = directory.join("witness.gz");
-        std::fs::rename(&solved, &witness).map_err(|source| Error::Io {
-            path: solved,
-            source,
-        })?;
-
-        let key_directory = self.key_directory(circuit)?;
-        self.run(
-            "bb prove",
-            circuit,
-            Command::new(&self.bb)
-                .args(["prove", "--verify", "-t", target.name(), "-b"])
-                .arg(self.artifact(circuit))
-                .arg("-w")
-                .arg(&witness)
-                .arg("-k")
-                .arg(key_directory.join("vk"))
-                .arg("-o")
-                .arg(&directory),
-        )?;
-        let proof = Proof {
-            fields: read_fields(&directory.join("proof"))?,
-            public_inputs: read_fields(&directory.join("public_inputs"))?,
-        };
-        std::fs::remove_dir_all(&directory).map_err(|source| Error::Io {
-            path: directory,
-            source,
-        })?;
-        Ok(proof)
-    }
-
-    /// Verifies a proof of `circuit` with `key` against `public_inputs`; an invalid proof is a `Tool` error.
-    pub fn verify(
-        &self,
-        circuit: &str,
-        key: &VerificationKey,
-        proof: &[Fr],
-        public_inputs: &[Fr],
-        target: Target,
-    ) -> Result<(), Error> {
-        let directory = self.work.join("verify").join(format!(
-            "{circuit}-{}-{}",
-            std::process::id(),
-            RUN.fetch_add(1, Ordering::Relaxed)
-        ));
-        create_dir(&directory)?;
-        let [key_file, proof_file, public_inputs_file] =
-            ["vk", "proof", "public_inputs"].map(|name| directory.join(name));
-        write(&key_file, &to_field_bytes(&key.fields))?;
-        write(&proof_file, &to_field_bytes(proof))?;
-        write(&public_inputs_file, &to_field_bytes(public_inputs))?;
-        let verified = self.run(
-            "bb verify",
-            circuit,
-            Command::new(&self.bb)
-                .args(["verify", "-t", target.name(), "-k"])
-                .arg(&key_file)
-                .arg("-p")
-                .arg(&proof_file)
-                .arg("-i")
-                .arg(&public_inputs_file),
-        );
-        std::fs::remove_dir_all(&directory).map_err(|source| Error::Io {
-            path: directory,
-            source,
-        })?;
-        verified
-    }
-
     /// The directory with the `vk` and `vk_hash` files of a circuit, which this writes on the first call.
-    fn key_directory(&self, circuit: &str) -> Result<PathBuf, Error> {
+    fn key_directory(&self, circuit: &str) -> Result<PathBuf, CliError> {
         let directory = self.work.join("vk").join(circuit);
         if !directory.join("vk_hash").exists() {
             create_dir(&directory)?;
             // The key of a circuit is the same for both targets.
-            self.run(
+            run_tool(
                 "bb write_vk",
-                circuit,
                 Command::new(&self.bb)
-                    .args(["write_vk", "-t", Target::Step.name(), "-b"])
+                    .args(["write_vk", "-t", target_name(Target::Step), "-b"])
                     .arg(self.artifact(circuit))
                     .arg("-o")
                     .arg(&directory),
@@ -212,30 +200,6 @@ impl Toolchain {
     fn artifact(&self, circuit: &str) -> PathBuf {
         self.circuits.join("target").join(format!("{circuit}.json"))
     }
-
-    fn run(
-        &self,
-        command: &'static str,
-        circuit: &str,
-        process: &mut Command,
-    ) -> Result<(), Error> {
-        let program = PathBuf::from(process.get_program());
-        let output = process
-            .output()
-            .map_err(|source| Error::Spawn { program, source })?;
-        if output.status.success() {
-            return Ok(());
-        }
-        Err(Error::Tool {
-            command,
-            circuit: circuit.to_string(),
-            output: format!(
-                "{}{}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            ),
-        })
-    }
 }
 
 /// The fields as bb writes them, and as the Groth16 wrap reads them.
@@ -243,8 +207,53 @@ pub fn to_field_bytes(fields: &[Fr]) -> Vec<u8> {
     fields.iter().flat_map(|&field| to_bytes(field)).collect()
 }
 
-fn read_fields(path: &Path) -> Result<Vec<Fr>, Error> {
-    let bytes = std::fs::read(path).map_err(|source| Error::Io {
+fn failed(circuit: &str, source: CliError) -> CircuitError {
+    CircuitError::Failed {
+        circuit: circuit.to_string(),
+        source: Box::new(source),
+    }
+}
+
+/// The bb target of a proof.
+fn target_name(target: Target) -> &'static str {
+    match target {
+        Target::Leaf => "noir-recursive",
+        Target::Step => "noir-recursive-no-zk",
+    }
+}
+
+/// A name for the files of one run of a circuit, unique in the process.
+fn run_name(circuit: &str) -> String {
+    format!(
+        "{circuit}-{}-{}",
+        std::process::id(),
+        RUN.fetch_add(1, Ordering::Relaxed)
+    )
+}
+
+/// Runs a tool whose failure is an error.
+fn run_tool(command: &'static str, process: &mut Command) -> Result<(), CliError> {
+    check(process)?.map_err(|output| CliError::Tool { command, output })
+}
+
+/// Runs a tool whose failure is a failed check; the inner error is the output of the tool.
+fn check(process: &mut Command) -> Result<Result<(), String>, CliError> {
+    let program = PathBuf::from(process.get_program());
+    let output = process
+        .output()
+        .map_err(|source| CliError::Spawn { program, source })?;
+    if output.status.success() {
+        return Ok(Ok(()));
+    }
+    Ok(Err(format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    )))
+}
+
+fn read_fields(path: &Path) -> Result<Vec<Fr>, CliError> {
+    let bytes = std::fs::read(path).map_err(|source| CliError::Io {
         path: path.to_path_buf(),
         source,
     })?;
@@ -255,28 +264,36 @@ fn read_fields(path: &Path) -> Result<Vec<Fr>, Error> {
             format!("{} bytes, not a multiple of 32", bytes.len()),
         ));
     }
-    Ok(chunks
+    chunks
         .iter()
         .map(|&chunk| from_bytes(chunk))
-        .collect::<Result<_, _>>()?)
+        .collect::<Result<_, _>>()
+        .map_err(|error| format_error(path, error.to_string()))
 }
 
-fn format_error(path: &Path, reason: String) -> Error {
-    Error::Format {
+fn format_error(path: &Path, reason: String) -> CliError {
+    CliError::Format {
         path: path.to_path_buf(),
         reason,
     }
 }
 
-fn create_dir(path: &Path) -> Result<(), Error> {
-    std::fs::create_dir_all(path).map_err(|source| Error::Io {
+fn create_dir(path: &Path) -> Result<(), CliError> {
+    std::fs::create_dir_all(path).map_err(|source| CliError::Io {
         path: path.to_path_buf(),
         source,
     })
 }
 
-fn write(path: &Path, bytes: &[u8]) -> Result<(), Error> {
-    std::fs::write(path, bytes).map_err(|source| Error::Io {
+fn remove_dir(path: &Path) -> Result<(), CliError> {
+    std::fs::remove_dir_all(path).map_err(|source| CliError::Io {
+        path: path.to_path_buf(),
+        source,
+    })
+}
+
+fn write(path: &Path, bytes: &[u8]) -> Result<(), CliError> {
+    std::fs::write(path, bytes).map_err(|source| CliError::Io {
         path: path.to_path_buf(),
         source,
     })

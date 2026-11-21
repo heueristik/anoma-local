@@ -10,8 +10,9 @@ use ark_ec::{AffineRepr, CurveGroup};
 
 use crate::Error;
 use crate::action::{COMPLIANCE, ProvedAction};
-use crate::inputs::{self, Field, StepState, fields};
-use crate::toolchain::{Target, Toolchain, to_field_bytes};
+use crate::circuit_prover::{CircuitProver, Target};
+use crate::inputs::{self, Field, StepState, circuit_inputs, fields};
+use crate::toolchain::to_field_bytes;
 
 /// The circuit of the step proof of the first action.
 pub const FIRST_STEP: &str = "first_step";
@@ -59,7 +60,7 @@ pub struct Transaction {
 /// Proves a balanced partial transaction for the AnomaVerifier `deployment`: one step proof for each action, the root
 /// proof, and its Groth16 wrap.
 pub fn prove(
-    toolchain: &Toolchain,
+    prover: &impl CircuitProver,
     partial: &PartialTransaction,
     deployment: &Deployment,
     keys: &Keys,
@@ -68,51 +69,60 @@ pub fn prove(
     if !partial.is_balanced() {
         return Err(Error::Unbalanced);
     }
-    let compliance = toolchain.verification_key(COMPLIANCE)?;
-    let first_step = toolchain.verification_key(FIRST_STEP)?;
-    let next_step = toolchain.verification_key(NEXT_STEP)?;
+    let compliance = prover.verification_key(COMPLIANCE)?;
+    let first_step = prover.verification_key(FIRST_STEP)?;
+    let next_step = prover.verification_key(NEXT_STEP)?;
 
-    let mut last = toolchain.prove(
+    let mut last = prover.prove(
         FIRST_STEP,
-        &inputs::FirstStep {
-            compliance_vk: fields(&compliance.fields),
-            compliance_key_hash: Field(compliance.hash),
-            first_step_key_hash: Field(first_step.hash),
-            next_step_key_hash: Field(next_step.hash),
-            action: action_proofs(first),
-        },
+        &circuit_inputs(
+            FIRST_STEP,
+            &inputs::FirstStep {
+                compliance_vk: fields(&compliance.fields),
+                compliance_key_hash: Field(compliance.hash),
+                first_step_key_hash: Field(first_step.hash),
+                next_step_key_hash: Field(next_step.hash),
+                action: action_proofs(first),
+            },
+        )?,
         Target::Step,
     )?;
     let mut last_circuit = FIRST_STEP;
     let mut last_vk = &first_step;
     for action in rest {
-        last = toolchain.prove(
+        last = prover.prove(
             NEXT_STEP,
-            &inputs::NextStep {
-                previous_vk: fields(&last_vk.fields),
-                previous_proof: fields(&last.fields),
-                previous: StepState::from_public_inputs(last_circuit, &last.public_inputs)?,
-                previous_is_first_step: last_circuit == FIRST_STEP,
-                compliance_vk: fields(&compliance.fields),
-                action: action_proofs(action),
-            },
+            &circuit_inputs(
+                NEXT_STEP,
+                &inputs::NextStep {
+                    previous_vk: fields(&last_vk.fields),
+                    previous_proof: fields(&last.fields),
+                    previous: StepState::from_public_inputs(last_circuit, &last.public_inputs)?,
+                    previous_is_first_step: last_circuit == FIRST_STEP,
+                    compliance_vk: fields(&compliance.fields),
+                    action: action_proofs(action),
+                },
+            )?,
             Target::Step,
         )?;
         last_circuit = NEXT_STEP;
         last_vk = &next_step;
     }
 
-    let root = toolchain.prove(
+    let root = prover.prove(
         ROOT,
-        &inputs::Root {
-            last_vk: fields(&last_vk.fields),
-            last_proof: fields(&last.fields),
-            last: StepState::from_public_inputs(last_circuit, &last.public_inputs)?,
-            last_is_first_step: last_circuit == FIRST_STEP,
-            rcv_total: partial.rcv_total.into(),
-            chain_id: Field(Fr::from(deployment.chain_id)),
-            verifier: Field(deployment.verifier_field()),
-        },
+        &circuit_inputs(
+            ROOT,
+            &inputs::Root {
+                last_vk: fields(&last_vk.fields),
+                last_proof: fields(&last.fields),
+                last: StepState::from_public_inputs(last_circuit, &last.public_inputs)?,
+                last_is_first_step: last_circuit == FIRST_STEP,
+                rcv_total: partial.rcv_total.into(),
+                chain_id: Field(Fr::from(deployment.chain_id)),
+                verifier: Field(deployment.verifier_field()),
+            },
+        )?,
         Target::Step,
     )?;
     let public_inputs: Vec<[u8; 32]> = root.public_inputs.iter().copied().map(to_bytes).collect();
@@ -130,8 +140,11 @@ pub fn prove(
 /// Sets up the Groth16 keys of the root circuit in `directory`, once for each root key hash.
 ///
 /// One party makes the setup and knows its secret, so it can make false proofs: the keys are for tests only.
-pub fn single_party_wrap_keys(toolchain: &Toolchain, directory: &Path) -> Result<Keys, Error> {
-    let root = toolchain.verification_key(ROOT)?;
+pub fn single_party_wrap_keys(
+    prover: &impl CircuitProver,
+    directory: &Path,
+) -> Result<Keys, Error> {
+    let root = prover.verification_key(ROOT)?;
     let keys = directory.join(to_hex(root.hash));
     if keys.exists() {
         return Ok(Keys::new(keys));

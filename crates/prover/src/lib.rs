@@ -4,6 +4,7 @@
 //! final proof that the contract checks.
 
 pub mod action;
+pub mod circuit_prover;
 mod error;
 pub mod inputs;
 pub mod toolchain;

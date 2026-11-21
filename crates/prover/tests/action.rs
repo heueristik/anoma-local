@@ -9,6 +9,7 @@ use anoma_arm::field::coordinates;
 use anoma_arm::resource::action_tree_root;
 use anoma_prover::Error;
 use anoma_prover::action::{Logic, ProvedAction, prove};
+use anoma_prover::circuit_prover::{CircuitError, CircuitProver};
 
 #[test]
 fn prove_gives_the_public_inputs_that_the_step_circuits_check() -> anyhow::Result<()> {
@@ -96,13 +97,7 @@ fn verify_errors_on_a_changed_compliance_proof() -> anyhow::Result<()> {
     );
 
     assert!(
-        matches!(
-            result,
-            Err(Error::Tool {
-                command: "bb verify",
-                ..
-            })
-        ),
+        matches!(result, Err(Error::Circuit(CircuitError::Rejected { .. }))),
         "got {result:?}"
     );
     Ok(())

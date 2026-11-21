@@ -11,6 +11,7 @@ use anoma_discovery::Receiver;
 use anoma_groth16_wrap::Keys;
 use anoma_intent::{Offer, Payload, Terms};
 use anoma_prover::action::{self, ActionWitness, Logic, Membership, ProvedAction};
+use anoma_prover::circuit_prover::CircuitProver;
 use anoma_prover::toolchain::Toolchain;
 use anoma_prover::transaction;
 use anyhow::Context;
@@ -40,16 +41,18 @@ pub fn wrap_keys(directory: &Path) -> anyhow::Result<Keys> {
 
 /// The logic ref of the trivial logic, which the token resources of the tests use.
 pub fn token_logic_ref() -> anyhow::Result<Fr> {
-    toolchain()
-        .key_hash(&Logic::trivial().circuit)
-        .context("write the key of the trivial logic")
+    Ok(toolchain()
+        .verification_key(&Logic::trivial().circuit)
+        .context("write the key of the trivial logic")?
+        .hash)
 }
 
 /// The logic ref of the intent logic.
 pub fn intent_logic_ref() -> anyhow::Result<Fr> {
-    toolchain()
-        .key_hash(anoma_intent::CIRCUIT)
-        .context("write the key of the intent logic")
+    Ok(toolchain()
+        .verification_key(anoma_intent::CIRCUIT)
+        .context("write the key of the intent logic")?
+        .hash)
 }
 
 /// A persistent token resource of the kind `label`, owned by `owner`. The action that creates it sets its nonce.
