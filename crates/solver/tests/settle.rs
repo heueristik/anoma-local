@@ -10,7 +10,7 @@ use anoma_arm::Fr;
 use anoma_arm::belt::{Belt, MembershipPath};
 use anoma_arm::digest::Action;
 use anoma_arm::resource::{NullifierKey, RESOURCE_BYTES, Resource};
-use anoma_discovery::{Discovery, EciesDiscovery, ReceiverKeys};
+use anoma_discovery::{Discovery, EciesDiscovery, EciesSecretKeys};
 use anoma_integration_test::chain::Chain;
 use anoma_integration_test::fixtures::{self, token};
 use anoma_intent_pool::{IntentPool, MemoryIntentId, MemoryIntentPool, PooledIntent};
@@ -33,7 +33,7 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
     let work = TempDir::new()?;
     let chain = Chain::deploy(&wrapper.keys, work.path()).await?;
     let [alice, bob, carol, sally] = [1u64, 2, 3, 4].map(|seed| NullifierKey(Fr::from(seed)));
-    let [alice_keys, bob_keys, carol_keys] = std::array::from_fn(|_| ReceiverKeys::random());
+    let [alice_keys, bob_keys, carol_keys] = std::array::from_fn(|_| EciesSecretKeys::random());
     let solver = solver(sally);
 
     let mints = [
@@ -152,7 +152,7 @@ fn solve_fills_a_copied_intent_once() -> anyhow::Result<()> {
         belt.path(0)?,
         alice,
         (BANANA, wanted_bananas),
-        &ReceiverKeys::random(),
+        &EciesSecretKeys::random(),
         &solver,
         101,
     )?;
@@ -161,7 +161,7 @@ fn solve_fills_a_copied_intent_once() -> anyhow::Result<()> {
         belt.path(1)?,
         bob,
         (APPLE, wanted_apples),
-        &ReceiverKeys::random(),
+        &EciesSecretKeys::random(),
         &solver,
         102,
     )?;
@@ -200,7 +200,7 @@ fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
         belt.path(0)?,
         alice,
         (BANANA, alice_wants),
-        &ReceiverKeys::random(),
+        &EciesSecretKeys::random(),
         &solver,
         101,
     )?;
@@ -209,7 +209,7 @@ fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
         belt.path(1)?,
         bob,
         (APPLE, bob_wants),
-        &ReceiverKeys::random(),
+        &EciesSecretKeys::random(),
         &solver,
         102,
     )?;
@@ -218,7 +218,7 @@ fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
         belt.path(2)?,
         dave,
         (BANANA, dave_wants),
-        &ReceiverKeys::random(),
+        &EciesSecretKeys::random(),
         &solver,
         105,
     )?;
@@ -265,7 +265,7 @@ fn solve_skips_an_intent_whose_payload_is_for_another_solver() -> anyhow::Result
                 belt.path(0)?,
                 alice,
                 (BANANA, alice_wants),
-                &ReceiverKeys::random(),
+                &EciesSecretKeys::random(),
                 &solver,
                 101,
             )?,
@@ -277,7 +277,7 @@ fn solve_skips_an_intent_whose_payload_is_for_another_solver() -> anyhow::Result
                 belt.path(1)?,
                 bob,
                 (APPLE, bob_wants),
-                &ReceiverKeys::random(),
+                &EciesSecretKeys::random(),
                 &solver,
                 102,
             )?,
@@ -289,7 +289,7 @@ fn solve_skips_an_intent_whose_payload_is_for_another_solver() -> anyhow::Result
                 belt.path(2)?,
                 dave,
                 (BANANA, dave_wants),
-                &ReceiverKeys::random(),
+                &EciesSecretKeys::random(),
                 &other_solver,
                 105,
             )?,
@@ -326,7 +326,7 @@ async fn ids(pool: &MemoryIntentPool) -> anyhow::Result<Vec<MemoryIntentId>> {
 fn solver(owner: NullifierKey) -> Solver<EciesDiscovery> {
     Solver {
         discovery: EciesDiscovery,
-        secret_keys: ReceiverKeys::random(),
+        secret_keys: EciesSecretKeys::random(),
         owner,
         token_logic: Logic::trivial(),
     }
@@ -351,7 +351,7 @@ fn propose(
     path: MembershipPath,
     owner: NullifierKey,
     (want_label, want_quantity): (u64, u128),
-    receiver: &ReceiverKeys,
+    receiver: &EciesSecretKeys,
     solver: &Solver<EciesDiscovery>,
     seed: u64,
 ) -> anyhow::Result<Vec<ProvedAction>> {
@@ -360,14 +360,14 @@ fn propose(
         owner,
         path,
         fixtures::terms(want_label, want_quantity, owner, seed)?,
-        receiver.receiver(),
-        &solver.secret_keys.receiver(),
+        receiver.address(),
+        &solver.secret_keys.address(),
         seed,
     )
 }
 
 /// The label, quantity and owner of each created resource whose plaintext the keys decrypt, sorted.
-fn received(actions: &[Action], keys: &ReceiverKeys) -> Vec<(Fr, u128, Fr)> {
+fn received(actions: &[Action], keys: &EciesSecretKeys) -> Vec<(Fr, u128, Fr)> {
     let mut received: Vec<(Fr, u128, Fr)> = actions
         .iter()
         .filter_map(|action| {
