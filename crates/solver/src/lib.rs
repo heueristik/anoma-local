@@ -4,6 +4,8 @@
 
 pub mod matching;
 
+use std::collections::BTreeSet;
+
 use anoma_arm::resource::{NullifierKey, Resource};
 use anoma_arm::{Fr, Scalar};
 use anoma_discovery::ReceiverKeys;
@@ -58,6 +60,7 @@ impl Solver {
     ) -> Result<Option<Solution>, Error> {
         let token_logic_ref = toolchain.key_hash(&self.token_logic.circuit)?;
         let intent_logic_ref = toolchain.key_hash(anoma_intent::CIRCUIT)?;
+        let mut nullifiers = BTreeSet::new();
         let candidates: Vec<Candidate> = pool
             .discover(&self.keys)
             .into_iter()
@@ -80,6 +83,7 @@ impl Solver {
                         })
                     })
             })
+            .filter(|candidate| has_fresh_nullifiers(&candidate.partial, &mut nullifiers))
             .collect();
         let orders: Vec<Order> = candidates
             .iter()
@@ -153,6 +157,19 @@ impl Solver {
             anoma_discovery::app_data(&self.keys.receiver(), &witness.created.to_bytes())?;
         Ok(witness)
     }
+}
+
+/// Whether no nullifier of the partial transaction repeats, in it or in `seen`; then it adds them to `seen`. A repeated
+/// nullifier makes the contract revert the whole transaction.
+fn has_fresh_nullifiers(partial: &PartialTransaction, seen: &mut BTreeSet<Fr>) -> bool {
+    let mut own = BTreeSet::new();
+    let fresh = partial.actions.iter().all(|proved| {
+        !seen.contains(&proved.action.nullifier) && own.insert(proved.action.nullifier)
+    });
+    if fresh {
+        seen.append(&mut own);
+    }
+    fresh
 }
 
 fn order(payload: &Payload) -> Order {

@@ -7,14 +7,14 @@
 use std::path::PathBuf;
 
 use anoma_arm::Fr;
-use anoma_arm::belt::Belt;
+use anoma_arm::belt::{Belt, MembershipPath};
 use anoma_arm::digest::Action;
 use anoma_arm::resource::{NullifierKey, RESOURCE_BYTES, Resource};
 use anoma_discovery::ReceiverKeys;
 use anoma_integration_test::chain::Chain;
 use anoma_integration_test::fixtures::{self, token};
 use anoma_intent_pool::IntentPool;
-use anoma_prover::action::{self, Logic};
+use anoma_prover::action::{self, ActionWitness, Logic, ProvedAction};
 use anoma_prover::transaction;
 use anoma_solver::Solver;
 use anyhow::Context;
@@ -33,11 +33,7 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
     let chain = Chain::deploy(&keys, work.path()).await?;
     let [alice, bob, carol, sally] = [1u64, 2, 3, 4].map(|seed| NullifierKey(Fr::from(seed)));
     let [alice_keys, bob_keys, carol_keys] = std::array::from_fn(|_| ReceiverKeys::random());
-    let solver = Solver {
-        keys: ReceiverKeys::random(),
-        owner: sally,
-        token_logic: Logic::trivial(),
-    };
+    let solver = solver(sally);
 
     let mints = [
         fixtures::mint(token(APPLE, 4, alice, 11)?, 21)?,
@@ -48,34 +44,40 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
     for mint in &mints[1..] {
         minted = minted.compose(action::prove(toolchain, mint)?);
     }
-    let minted = transaction::prove(toolchain, &minted, &keys)?;
-    chain.execute(&minted).await?;
-    let mut belt = Belt::default();
-    belt.append(
-        &minted
-            .actions
-            .iter()
-            .map(|action| action.commitment)
-            .collect::<Vec<_>>(),
-    );
+    chain
+        .execute(&transaction::prove(toolchain, &minted, &keys)?)
+        .await?;
+    let belt = belt(&mints);
 
     // Each party proves the action that gives up its minted token for an intent, and submits it to the pool.
     let mut pool = IntentPool::default();
-    let mut propose = |index: usize, owner, want, want_quantity, receiver: &ReceiverKeys, seed| {
-        let actions = fixtures::propose(
-            mints[index].created,
-            owner,
-            belt.path(index)?,
-            fixtures::terms(want, want_quantity, owner, seed)?,
-            receiver.receiver(),
-            &solver.keys.receiver(),
-            seed,
-        )?;
-        anyhow::Ok(pool.submit(actions))
-    };
-    let alice_intent = propose(0, alice, BANANA, 4, &alice_keys, 101)?;
-    let bob_intent = propose(1, bob, APPLE, 3, &bob_keys, 102)?;
-    let carol_intent = propose(2, carol, APPLE, 10, &carol_keys, 103)?;
+    let alice_intent = pool.submit(propose(
+        &mints[0],
+        belt.path(0)?,
+        alice,
+        (BANANA, 4),
+        &alice_keys,
+        &solver,
+        101,
+    )?);
+    let bob_intent = pool.submit(propose(
+        &mints[1],
+        belt.path(1)?,
+        bob,
+        (APPLE, 3),
+        &bob_keys,
+        &solver,
+        102,
+    )?);
+    let carol_intent = pool.submit(propose(
+        &mints[2],
+        belt.path(2)?,
+        carol,
+        (APPLE, 10),
+        &carol_keys,
+        &solver,
+        103,
+    )?);
 
     let solution = solver
         .solve(toolchain, &mut pool)?
@@ -105,6 +107,94 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
     );
     assert_eq!(received(&settlement.actions, &carol_keys), []);
     Ok(())
+}
+
+#[test]
+fn solve_fills_a_copied_intent_once() -> anyhow::Result<()> {
+    let [alice, bob, sally] = [1u64, 2, 4].map(|seed| NullifierKey(Fr::from(seed)));
+    let solver = solver(sally);
+    let (apples, wanted_bananas, bananas, wanted_apples) = (4, 3, 7, 3);
+    let mints = [
+        fixtures::mint(token(APPLE, apples, alice, 11)?, 21)?,
+        fixtures::mint(token(BANANA, bananas, bob, 12)?, 22)?,
+    ];
+    let belt = belt(&mints);
+    let mut pool = IntentPool::default();
+    let alice_actions = propose(
+        &mints[0],
+        belt.path(0)?,
+        alice,
+        (BANANA, wanted_bananas),
+        &ReceiverKeys::random(),
+        &solver,
+        101,
+    )?;
+    let alice_intent = pool.submit(alice_actions.clone());
+    let bob_intent = pool.submit(propose(
+        &mints[1],
+        belt.path(1)?,
+        bob,
+        (APPLE, wanted_apples),
+        &ReceiverKeys::random(),
+        &solver,
+        102,
+    )?);
+
+    // Anyone can submit the actions of Alice again; a fill of both copies would consume her apples twice.
+    pool.submit(alice_actions);
+    assert!(
+        bananas >= 2 * wanted_bananas && 2 * apples >= wanted_apples,
+        "the premise is that both copies and the intent of Bob balance together"
+    );
+
+    let solution = solver
+        .solve(fixtures::toolchain(), &mut pool)?
+        .context("the solver fills no intent")?;
+    assert_eq!(solution.filled, [alice_intent, bob_intent]);
+    Ok(())
+}
+
+/// A solver that trades tokens of the trivial logic and keeps its surplus for `owner`.
+fn solver(owner: NullifierKey) -> Solver {
+    Solver {
+        keys: ReceiverKeys::random(),
+        owner,
+        token_logic: Logic::trivial(),
+    }
+}
+
+/// The belt of the tokens that the mints create, in their order.
+fn belt(mints: &[ActionWitness]) -> Belt {
+    let mut belt = Belt::default();
+    belt.append(
+        &mints
+            .iter()
+            .map(|mint| mint.created.commitment())
+            .collect::<Vec<_>>(),
+    );
+    belt
+}
+
+/// The proved action of `owner` that gives up the token of `mint` at `path` for an intent that wants `want`, a label
+/// and a quantity, for the keys of `receiver`. The payload is for the keys of the solver.
+fn propose(
+    mint: &ActionWitness,
+    path: MembershipPath,
+    owner: NullifierKey,
+    (want_label, want_quantity): (u64, u128),
+    receiver: &ReceiverKeys,
+    solver: &Solver,
+    seed: u64,
+) -> anyhow::Result<Vec<ProvedAction>> {
+    fixtures::propose(
+        mint.created,
+        owner,
+        path,
+        fixtures::terms(want_label, want_quantity, owner, seed)?,
+        receiver.receiver(),
+        &solver.keys.receiver(),
+        seed,
+    )
 }
 
 /// The label, quantity and owner of each created resource whose plaintext the keys decrypt, sorted.
