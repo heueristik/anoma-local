@@ -8,7 +8,7 @@ use crate::{Error, Fr};
 pub const RESOURCE_BYTES: usize = 8 * 32;
 
 /// A resource of the resource machine, with every field as a BN254 field element.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Resource {
     pub logic_ref: Fr,
     pub label_ref: Fr,

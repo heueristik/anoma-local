@@ -9,6 +9,7 @@ pub mod circuit_prover;
 pub mod cli_prover;
 mod error;
 pub mod inputs;
+pub mod resource_logic;
 pub mod root_proof_wrapper;
 pub mod transaction;
 

@@ -1,12 +1,14 @@
 #![allow(dead_code)]
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anoma_arm::belt::Belt;
 use anoma_arm::resource::NullifierKey;
 use anoma_arm::{Fr, Scalar};
 use anoma_integration_test::fixtures::token;
-use anoma_prover::action::{ActionWitness, Logic};
+use anoma_prover::action::ActionWitness;
+use anoma_prover::resource_logic::TrivialLogic;
 
 pub use anoma_integration_test::fixtures::circuit_prover;
 
@@ -26,7 +28,7 @@ pub fn ephemeral_action(
         token(1, created_quantity, owner, 3000 + seed)?,
         consumed_quantity,
         owner,
-        Logic::trivial(),
+        Arc::new(TrivialLogic),
         Belt::default().root(),
         Scalar::from(4000 + seed),
     )?)

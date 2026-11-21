@@ -8,8 +8,9 @@ use anoma_arm::Fr;
 use anoma_arm::action::action_tree_root;
 use anoma_arm::field::coordinates;
 use anoma_prover::Error;
-use anoma_prover::action::{Logic, ProvedAction, prove};
+use anoma_prover::action::{ProvedAction, prove};
 use anoma_prover::circuit_prover::{CircuitError, CircuitProver};
+use anoma_prover::resource_logic::{ResourceLogic, TrivialLogic};
 
 #[test]
 fn prove_gives_the_public_inputs_that_the_step_circuits_check() -> anyhow::Result<()> {
@@ -77,10 +78,7 @@ fn verify_accepts_the_proofs_of_an_action() -> anyhow::Result<()> {
     let prover = common::circuit_prover();
     let proved = proved_action()?;
 
-    proved.verify(
-        prover,
-        &[prover.verification_key(&Logic::trivial().circuit)?],
-    )?;
+    proved.verify(prover, &[prover.verification_key(TrivialLogic.circuit())?])?;
     Ok(())
 }
 
@@ -91,10 +89,7 @@ fn verify_errors_on_a_changed_compliance_proof() -> anyhow::Result<()> {
     let middle = proved.compliance_proof.fields.len() / 2;
     proved.compliance_proof.fields[middle] += Fr::from(1u64);
 
-    let result = proved.verify(
-        prover,
-        &[prover.verification_key(&Logic::trivial().circuit)?],
-    );
+    let result = proved.verify(prover, &[prover.verification_key(TrivialLogic.circuit())?]);
 
     assert!(
         matches!(result, Err(Error::Circuit(CircuitError::Rejected { .. }))),

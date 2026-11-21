@@ -5,13 +5,17 @@ mod payload;
 
 pub use payload::{Mismatch, Offer, Payload};
 
+use std::sync::Arc;
+
 use anoma_arm::app_data::AppData;
 use anoma_arm::hash::{Domain, hash};
 use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
 use anoma_arm::{Fr, Scalar};
 use anoma_prover::Error;
-use anoma_prover::action::{ActionWitness, Logic, Membership};
+use anoma_prover::action::{ActionWitness, Membership};
+use anoma_prover::circuit_prover::CircuitInputs;
 use anoma_prover::inputs::{self, Field, Quantity, circuit_inputs};
+use anoma_prover::resource_logic::{LogicContext, ResourceLogic};
 use serde::Serialize;
 
 /// The circuit of the intent logic.
@@ -19,7 +23,7 @@ pub const CIRCUIT: &str = "intent_logic";
 
 /// What the creator of an intent wants: each field of the resource that fills it, except the nonce, which comes from
 /// the nullifier of the intent.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Terms {
     pub want_logic_ref: Fr,
     pub want_label_ref: Fr,
@@ -80,20 +84,54 @@ impl Terms {
     }
 }
 
+/// The logic of an intent with `terms`. A consumed intent opens its nullifier, and its action creates the resource of
+/// its terms.
+#[derive(Clone, Copy, Debug)]
+pub struct IntentLogic {
+    pub terms: Terms,
+}
+
+impl ResourceLogic for IntentLogic {
+    fn circuit(&self) -> &str {
+        CIRCUIT
+    }
+
+    fn private_inputs(&self, context: &LogicContext) -> Result<CircuitInputs, Error> {
+        // The logic checks nothing for a created intent, but nargo needs a value for each private input.
+        let witness = if context.is_consumed {
+            Witness::new(
+                &context.action.consumed,
+                context.action.nullifier_key,
+                &self.terms,
+                &context.action.created,
+            )
+        } else {
+            let zero = Resource::default();
+            Witness::new(
+                &zero,
+                NullifierKey(Fr::from(0u64)),
+                &Terms::default(),
+                &zero,
+            )
+        };
+        circuit_inputs(CIRCUIT, &witness)
+    }
+}
+
 /// The action that consumes `intent` and creates the resource of its terms with `created_logic`. It shows the
 /// historical root `commitment_tree_root`.
 pub fn fill(
     intent: &Resource,
     nullifier_key: NullifierKey,
     terms: &Terms,
-    created_logic: Logic,
+    created_logic: Arc<dyn ResourceLogic>,
     commitment_tree_root: Fr,
     rcv: Scalar,
 ) -> Result<ActionWitness, Error> {
     let created = terms.filling_resource(intent.nullifier(nullifier_key)?);
     Ok(ActionWitness {
         consumed: *intent,
-        consumed_logic: consumed_logic(intent, nullifier_key, terms, &created)?,
+        consumed_logic: Arc::new(IntentLogic { terms: *terms }),
         consumed_app_data: AppData::default(),
         nullifier_key,
         membership: Membership::Ephemeral {
@@ -106,56 +144,6 @@ pub fn fill(
     })
 }
 
-/// The logic of a created intent. It checks nothing, but nargo needs a value for each private input.
-pub fn created_logic() -> Result<Logic, Error> {
-    let zero = Resource {
-        logic_ref: Fr::from(0u64),
-        label_ref: Fr::from(0u64),
-        value_ref: Fr::from(0u64),
-        quantity: 0,
-        nonce: Fr::from(0u64),
-        nullifier_key_commitment: Fr::from(0u64),
-        is_ephemeral: false,
-        rand_seed: Fr::from(0u64),
-    };
-    let terms = Terms {
-        want_logic_ref: Fr::from(0u64),
-        want_label_ref: Fr::from(0u64),
-        want_value_ref: Fr::from(0u64),
-        want_quantity: 0,
-        receiver_nullifier_key_commitment: Fr::from(0u64),
-        want_rand_seed: Fr::from(0u64),
-    };
-    consumed_logic(&zero, NullifierKey(Fr::from(0u64)), &terms, &zero)
-}
-
-/// The logic of a consumed intent: the intent opens its nullifier, and `created` is the created resource of the
-/// action.
-pub fn consumed_logic(
-    intent: &Resource,
-    nullifier_key: NullifierKey,
-    terms: &Terms,
-    created: &Resource,
-) -> Result<Logic, Error> {
-    let witness = Witness {
-        intent: intent.into(),
-        nullifier_key: Field(nullifier_key.0),
-        terms: TermsInput {
-            want_logic_ref: Field(terms.want_logic_ref),
-            want_label_ref: Field(terms.want_label_ref),
-            want_value_ref: Field(terms.want_value_ref),
-            want_quantity: Quantity(terms.want_quantity),
-            receiver_nullifier_key_commitment: Field(terms.receiver_nullifier_key_commitment),
-            want_rand_seed: Field(terms.want_rand_seed),
-        },
-        created: created.into(),
-    };
-    Ok(Logic {
-        circuit: CIRCUIT.to_string(),
-        witness: circuit_inputs(CIRCUIT, &witness)?,
-    })
-}
-
 /// The private inputs of the intent logic.
 #[derive(Serialize)]
 struct Witness {
@@ -163,6 +151,29 @@ struct Witness {
     nullifier_key: Field,
     terms: TermsInput,
     created: inputs::Resource,
+}
+
+impl Witness {
+    fn new(
+        intent: &Resource,
+        nullifier_key: NullifierKey,
+        terms: &Terms,
+        created: &Resource,
+    ) -> Self {
+        Self {
+            intent: intent.into(),
+            nullifier_key: Field(nullifier_key.0),
+            terms: TermsInput {
+                want_logic_ref: Field(terms.want_logic_ref),
+                want_label_ref: Field(terms.want_label_ref),
+                want_value_ref: Field(terms.want_value_ref),
+                want_quantity: Quantity(terms.want_quantity),
+                receiver_nullifier_key_commitment: Field(terms.receiver_nullifier_key_commitment),
+                want_rand_seed: Field(terms.want_rand_seed),
+            },
+            created: created.into(),
+        }
+    }
 }
 
 #[derive(Serialize)]

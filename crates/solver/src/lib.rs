@@ -6,6 +6,7 @@ pub mod cp_sat;
 pub mod matching;
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use anoma_arm::app_data::AppData;
 use anoma_arm::resource::{NullifierKey, Resource};
@@ -14,8 +15,9 @@ use anoma_discovery::Discovery;
 use anoma_intent::Payload;
 use anoma_intent_pool::PooledIntent;
 use anoma_prover::PartialTransaction;
-use anoma_prover::action::{self, ActionWitness, Logic};
+use anoma_prover::action::{self, ActionWitness};
 use anoma_prover::circuit_prover::{CircuitError, CircuitProver};
+use anoma_prover::resource_logic::ResourceLogic;
 use ark_ff::UniformRand;
 use rand_core::OsRng;
 
@@ -41,7 +43,7 @@ pub struct Solver<D: Discovery, M> {
     pub matcher: M,
     pub owner: NullifierKey,
     /// The solver skips intents of tokens with other logics.
-    pub token_logic: Logic,
+    pub token_logic: Arc<dyn ResourceLogic>,
 }
 
 /// A balanced partial transaction, and the ids of the intents that it fills, which the caller removes from the pool
@@ -68,7 +70,7 @@ impl<D: Discovery, M: Matcher> Solver<D, M> {
         commitment_tree_root: Fr,
     ) -> Result<Option<Solution<Id>>, Error> {
         let logic_keys = [
-            prover.verification_key(&self.token_logic.circuit)?,
+            prover.verification_key(self.token_logic.circuit())?,
             prover.verification_key(anoma_intent::CIRCUIT)?,
         ];
         let (token_logic_ref, intent_logic_ref) = (logic_keys[0].hash, logic_keys[1].hash);
@@ -160,7 +162,7 @@ impl<D: Discovery, M: Matcher> Solver<D, M> {
             &payload.intent(intent_logic_ref),
             payload.nullifier_key,
             &payload.terms,
-            self.token_logic.clone(),
+            Arc::clone(&self.token_logic),
             commitment_tree_root,
             Scalar::rand(&mut OsRng),
         )?;
@@ -189,7 +191,7 @@ impl<D: Discovery, M: Matcher> Solver<D, M> {
             created,
             0,
             NullifierKey(Fr::rand(&mut OsRng)),
-            self.token_logic.clone(),
+            Arc::clone(&self.token_logic),
             commitment_tree_root,
             Scalar::rand(&mut OsRng),
         )?;

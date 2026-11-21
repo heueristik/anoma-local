@@ -162,7 +162,7 @@ pub(crate) struct Logic<'a> {
     pub action_tree_root: Field,
     pub app_data_hash: Field,
     #[serde(flatten)]
-    pub witness: &'a CircuitInputs,
+    pub private_inputs: &'a CircuitInputs,
 }
 
 #[derive(Serialize)]

@@ -1,5 +1,7 @@
 //! The leaf proofs of one action: its compliance unit and the logics of its two resources.
 
+use std::sync::Arc;
+
 use anoma_arm::action::{Action, action_tree_root};
 use anoma_arm::app_data::AppData;
 use anoma_arm::belt::MembershipPath;
@@ -9,30 +11,13 @@ use anoma_arm::kind::Kind;
 use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
 use anoma_arm::{Fr, Point, Scalar};
 
-use crate::circuit_prover::{CircuitInputs, CircuitProver, Proof, Target, VerificationKey};
+use crate::circuit_prover::{CircuitProver, Proof, Target, VerificationKey};
 use crate::inputs::{self, Field, circuit_inputs};
+use crate::resource_logic::{LogicContext, ResourceLogic};
 use crate::{Error, PartialTransaction};
 
 /// The circuit of the compliance unit.
 pub const COMPLIANCE: &str = "compliance";
-
-/// A resource logic: its circuit, whose key hash is the logic ref, and its private inputs.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Logic {
-    pub circuit: String,
-    /// The inputs of the circuit besides `tag`, `is_consumed`, `action_tree_root` and `app_data_hash`.
-    pub witness: CircuitInputs,
-}
-
-impl Logic {
-    /// The logic that accepts every resource.
-    pub fn trivial() -> Self {
-        Self {
-            circuit: "trivial_logic".to_string(),
-            witness: CircuitInputs::new(),
-        }
-    }
-}
 
 /// How an action shows that its consumed resource exists.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -48,12 +33,12 @@ pub enum Membership {
 #[derive(Clone, Debug)]
 pub struct ActionWitness {
     pub consumed: Resource,
-    pub consumed_logic: Logic,
+    pub consumed_logic: Arc<dyn ResourceLogic>,
     pub consumed_app_data: AppData,
     pub nullifier_key: NullifierKey,
     pub membership: Membership,
     pub created: Resource,
-    pub created_logic: Logic,
+    pub created_logic: Arc<dyn ResourceLogic>,
     pub created_app_data: AppData,
     pub rcv: Scalar,
 }
@@ -66,7 +51,7 @@ impl ActionWitness {
         created: Resource,
         consumed_quantity: u128,
         source: NullifierKey,
-        logic: Logic,
+        logic: Arc<dyn ResourceLogic>,
         commitment_tree_root: Fr,
         rcv: Scalar,
     ) -> Result<Self, Error> {
@@ -234,30 +219,28 @@ pub fn prove(
         Target::Leaf,
     )?;
 
-    let root = action_tree_root(nullifier, commitment);
+    let action_tree_root = action_tree_root(nullifier, commitment);
     let consumed_logic_proof = prove_logic(
         prover,
-        &witness.consumed_logic,
-        witness.consumed.logic_ref,
-        inputs::Logic {
-            tag: Field(nullifier),
+        witness.consumed_logic.as_ref(),
+        &LogicContext {
+            action: witness,
             is_consumed: true,
-            action_tree_root: Field(root),
-            app_data_hash: Field(action.consumed_app_data.hash()),
-            witness: &witness.consumed_logic.witness,
+            action_tree_root,
         },
+        nullifier,
+        action.consumed_app_data.hash(),
     )?;
     let created_logic_proof = prove_logic(
         prover,
-        &witness.created_logic,
-        witness.created.logic_ref,
-        inputs::Logic {
-            tag: Field(commitment),
+        witness.created_logic.as_ref(),
+        &LogicContext {
+            action: witness,
             is_consumed: false,
-            action_tree_root: Field(root),
-            app_data_hash: Field(action.created_app_data.hash()),
-            witness: &witness.created_logic.witness,
+            action_tree_root,
         },
+        commitment,
+        action.created_app_data.hash(),
     )?;
 
     Ok(PartialTransaction {
@@ -272,26 +255,33 @@ pub fn prove(
     })
 }
 
-/// Proves a resource logic, after it checks that the logic ref of the resource is the key hash of the logic.
+/// Proves the logic of the resource of `context` with its tag and the hash of its app data, after it checks that the
+/// logic ref of the resource is the key hash of the logic.
 fn prove_logic(
     prover: &impl CircuitProver,
-    logic: &Logic,
-    logic_ref: Fr,
-    inputs: inputs::Logic,
+    logic: &dyn ResourceLogic,
+    context: &LogicContext,
+    tag: Fr,
+    app_data_hash: Fr,
 ) -> Result<LogicProof, Error> {
-    let verification_key = prover.verification_key(&logic.circuit)?;
+    let circuit = logic.circuit();
+    let verification_key = prover.verification_key(circuit)?;
+    let logic_ref = context.resource().logic_ref;
     if verification_key.hash != logic_ref {
         return Err(Error::LogicRef {
-            circuit: logic.circuit.clone(),
+            circuit: circuit.to_string(),
             logic_ref: to_hex(logic_ref),
             key_hash: to_hex(verification_key.hash),
         });
     }
-    let proof = prover.prove(
-        &logic.circuit,
-        &circuit_inputs(&logic.circuit, &inputs)?,
-        Target::Leaf,
-    )?;
+    let inputs = inputs::Logic {
+        tag: Field(tag),
+        is_consumed: context.is_consumed,
+        action_tree_root: Field(context.action_tree_root),
+        app_data_hash: Field(app_data_hash),
+        private_inputs: &logic.private_inputs(context)?,
+    };
+    let proof = prover.prove(circuit, &circuit_inputs(circuit, &inputs)?, Target::Leaf)?;
     Ok(LogicProof {
         verification_key,
         proof,

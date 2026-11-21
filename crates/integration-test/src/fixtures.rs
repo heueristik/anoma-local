@@ -1,7 +1,7 @@
 //! Parties, token resources and actions for the end-to-end tests.
 
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use anoma_arm::app_data::AppData;
 use anoma_arm::belt::{Belt, MembershipPath};
@@ -9,10 +9,11 @@ use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
 use anoma_arm::{Fr, Scalar};
 use anoma_discovery::{Discovery, EciesAddress, EciesDiscovery};
 use anoma_groth16_wrap::Groth16Wrapper;
-use anoma_intent::{Offer, Payload, Terms};
-use anoma_prover::action::{self, ActionWitness, Logic, Membership, ProvedAction};
+use anoma_intent::{IntentLogic, Offer, Payload, Terms};
+use anoma_prover::action::{self, ActionWitness, Membership, ProvedAction};
 use anoma_prover::circuit_prover::CircuitProver;
 use anoma_prover::cli_prover::CliProver;
+use anoma_prover::resource_logic::{ResourceLogic, TrivialLogic};
 use anyhow::Context;
 use tempfile::TempDir;
 
@@ -42,7 +43,7 @@ pub fn groth16_wrapper(directory: &Path) -> anyhow::Result<Groth16Wrapper> {
 /// The logic ref of the trivial logic, which the token resources of the tests use.
 pub fn token_logic_ref() -> anyhow::Result<Fr> {
     Ok(circuit_prover()
-        .verification_key(&Logic::trivial().circuit)
+        .verification_key(TrivialLogic.circuit())
         .context("write the key of the trivial logic")?
         .hash)
 }
@@ -95,11 +96,11 @@ pub fn terms(
 /// An action that consumes `consumed` and creates `created` with the nonce that the nullifier of `consumed` gives.
 pub fn action(
     consumed: Resource,
-    consumed_logic: Logic,
+    consumed_logic: Arc<dyn ResourceLogic>,
     nullifier_key: NullifierKey,
     membership: Membership,
     created: Resource,
-    created_logic: Logic,
+    created_logic: Arc<dyn ResourceLogic>,
     rcv: u64,
 ) -> anyhow::Result<ActionWitness> {
     let nullifier = consumed.nullifier(nullifier_key)?;
@@ -126,7 +127,7 @@ pub fn mint(created: Resource, rcv: u64) -> anyhow::Result<ActionWitness> {
         created,
         created.quantity,
         NullifierKey(Fr::from(rcv)),
-        Logic::trivial(),
+        Arc::new(TrivialLogic),
         Belt::default().root(),
         Scalar::from(rcv),
     )?)
@@ -158,11 +159,11 @@ pub fn propose(
     };
     let mut witness = self::action(
         token,
-        Logic::trivial(),
+        Arc::new(TrivialLogic),
         owner,
         Membership::Persistent(path),
         payload.intent(intent_logic_ref()?),
-        anoma_intent::created_logic()?,
+        Arc::new(IntentLogic { terms }),
         seed,
     )?;
     witness.created_app_data = EciesDiscovery.app_data(solver, &payload.to_bytes())?;

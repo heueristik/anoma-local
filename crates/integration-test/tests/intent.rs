@@ -5,6 +5,7 @@
 #![cfg(feature = "slow-tests")]
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anoma_arm::Fr;
 use anoma_arm::Scalar;
@@ -13,9 +14,10 @@ use anoma_arm::resource::{NullifierKey, Resource};
 use anoma_bindings::conversion::word;
 use anoma_integration_test::chain::Chain;
 use anoma_integration_test::fixtures::{self, action as build_action, intent_logic_ref, token};
-use anoma_intent::Terms;
-use anoma_prover::action::{ActionWitness, Logic, Membership};
+use anoma_intent::{IntentLogic, Terms};
+use anoma_prover::action::{ActionWitness, Membership};
 use anoma_prover::circuit_prover::CircuitError;
+use anoma_prover::resource_logic::TrivialLogic;
 use anoma_prover::{Error, PartialTransaction, Transaction, action, transaction};
 use tempfile::TempDir;
 
@@ -102,8 +104,6 @@ fn prove_errors_on_a_fill_with_another_quantity_than_the_terms() -> anyhow::Resu
     );
     let mut witness = intent.fill(&resource, Belt::default().root(), 41)?;
     witness.created.quantity += 1;
-    witness.consumed_logic =
-        anoma_intent::consumed_logic(&resource, intent.nullifier_key, &terms, &witness.created)?;
 
     let result = action::prove(fixtures::circuit_prover(), &witness);
 
@@ -170,11 +170,13 @@ impl Intent {
         );
         let witness = build_action(
             token,
-            Logic::trivial(),
+            Arc::new(TrivialLogic),
             owner,
             Membership::Persistent(belt.path(index)?),
             intent,
-            anoma_intent::created_logic()?,
+            Arc::new(IntentLogic {
+                terms: self.terms()?,
+            }),
             rcv,
         )?;
         let resource = witness.created;
@@ -191,7 +193,7 @@ impl Intent {
             intent,
             self.nullifier_key,
             &self.terms()?,
-            Logic::trivial(),
+            Arc::new(TrivialLogic),
             root,
             Scalar::from(rcv),
         )?)
@@ -205,7 +207,7 @@ fn take_surplus(created: Resource, root: Fr, rcv: u64) -> anyhow::Result<ActionW
         created,
         0,
         NullifierKey(Fr::from(rcv)),
-        Logic::trivial(),
+        Arc::new(TrivialLogic),
         root,
         Scalar::from(rcv),
     )?)

@@ -5,6 +5,7 @@
 #![cfg(feature = "slow-tests")]
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anoma_arm::Fr;
 use anoma_arm::action::Action;
@@ -14,7 +15,8 @@ use anoma_discovery::{Discovery, EciesDiscovery, EciesSecretKeys};
 use anoma_integration_test::chain::Chain;
 use anoma_integration_test::fixtures::{self, token};
 use anoma_intent_pool::{IntentPool, MemoryIntentId, MemoryIntentPool, PooledIntent};
-use anoma_prover::action::{self, ActionWitness, Logic, ProvedAction};
+use anoma_prover::action::{self, ActionWitness, ProvedAction};
+use anoma_prover::resource_logic::TrivialLogic;
 use anoma_prover::transaction;
 use anoma_solver::Solver;
 use anoma_solver::cp_sat::CpSatMatcher;
@@ -330,7 +332,7 @@ fn solver(owner: NullifierKey) -> Solver<EciesDiscovery, CpSatMatcher> {
         secret_keys: EciesSecretKeys::random(),
         matcher: CpSatMatcher,
         owner,
-        token_logic: Logic::trivial(),
+        token_logic: Arc::new(TrivialLogic),
     }
 }
 
