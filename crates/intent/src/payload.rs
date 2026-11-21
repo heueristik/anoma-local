@@ -5,7 +5,7 @@ use anoma_arm::field::{from_bytes, to_bytes};
 use anoma_arm::kind::Kind;
 use anoma_arm::resource::{NullifierKey, Resource};
 use anoma_arm::{Fr, Scalar};
-use anoma_discovery::{PublicKey, Receiver};
+use anoma_discovery::ReceiverAddress;
 use anoma_prover::PartialTransaction;
 use anoma_prover::action::ProvedAction;
 
@@ -20,20 +20,20 @@ pub struct Offer {
 }
 
 /// The fields of the intent that its terms do not fix, what the actions give up, the rcv sum that opens their delta,
-/// and the keys that receive the resource that fills the terms.
+/// and the address of the receiver of the resource that fills the terms.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Payload {
+pub struct Payload<A> {
     pub nonce: Fr,
     pub rand_seed: Fr,
     pub nullifier_key: NullifierKey,
     pub terms: Terms,
     pub offer: Offer,
     pub rcv_total: Scalar,
-    pub receiver: Receiver,
+    pub receiver: A,
 }
 
-/// The length of an encoded payload.
-const PAYLOAD_BYTES: usize = 3 * 32 + (5 * 32 + 16) + (2 * 32 + 16) + 32 + 2 * 33;
+/// The length of an encoded payload without the address of the receiver, which comes last.
+const FIXED_BYTES: usize = 3 * 32 + (5 * 32 + 16) + (2 * 32 + 16) + 32;
 
 /// Why a payload does not describe the actions of its intent.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -44,9 +44,9 @@ pub enum Mismatch {
     Delta,
 }
 
-impl Payload {
+impl<A: ReceiverAddress> Payload<A> {
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(PAYLOAD_BYTES);
+        let mut bytes = Vec::with_capacity(FIXED_BYTES);
         for field in [
             self.nonce,
             self.rand_seed,
@@ -65,8 +65,7 @@ impl Payload {
         }
         bytes.extend_from_slice(&self.offer.quantity.to_be_bytes());
         bytes.extend_from_slice(&to_bytes(self.rcv_total));
-        bytes.extend_from_slice(&self.receiver.discovery_key.to_bytes());
-        bytes.extend_from_slice(&self.receiver.encryption_key.to_bytes());
+        bytes.extend_from_slice(&self.receiver.to_bytes());
         bytes
     }
 
@@ -88,11 +87,8 @@ impl Payload {
             quantity: u128::from_be_bytes(reader.take()?),
         };
         let rcv_total = from_bytes(reader.take()?).ok()?;
-        let receiver = Receiver {
-            discovery_key: PublicKey::from_bytes(reader.take()?)?,
-            encryption_key: PublicKey::from_bytes(reader.take()?)?,
-        };
-        reader.0.is_empty().then_some(Self {
+        let receiver = A::from_bytes(reader.0)?;
+        Some(Self {
             nonce,
             rand_seed,
             nullifier_key,
@@ -109,7 +105,9 @@ impl Payload {
             receiver,
         })
     }
+}
 
+impl<A> Payload<A> {
     /// The intent of the payload, with `intent_logic_ref` as the key hash of the intent logic.
     pub fn intent(&self, intent_logic_ref: Fr) -> Resource {
         self.terms.intent(

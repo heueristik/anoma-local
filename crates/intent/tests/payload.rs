@@ -3,14 +3,14 @@ use anoma_arm::digest::{Action, AppData};
 use anoma_arm::kind::Kind;
 use anoma_arm::resource::NullifierKey;
 use anoma_arm::{Fr, Scalar};
-use anoma_discovery::ReceiverKeys;
+use anoma_discovery::{Receiver, ReceiverKeys};
 use anoma_intent::{Mismatch, Offer, Payload, Terms};
 use anoma_prover::action::{LogicProof, ProvedAction};
 use anoma_prover::circuit_prover::Proof;
 
 const INTENT_LOGIC_REF: u64 = 9;
 
-fn payload() -> Payload {
+fn payload() -> Payload<Receiver> {
     let terms = Terms {
         want_logic_ref: Fr::from(1u64),
         want_label_ref: Fr::from(2u64),
@@ -36,7 +36,7 @@ fn payload() -> Payload {
 }
 
 /// The action that gives up `quantity` of the offered kind and creates the intent, with empty proofs.
-fn giving_action(payload: &Payload, quantity: u128) -> ProvedAction {
+fn giving_action(payload: &Payload<Receiver>, quantity: u128) -> ProvedAction {
     let intent = payload.intent(Fr::from(INTENT_LOGIC_REF));
     let offer = Kind::new(payload.offer.logic_ref, payload.offer.label_ref).base;
     let intent_kind = Kind::new(intent.logic_ref, intent.label_ref).base;
@@ -68,13 +68,13 @@ fn from_bytes_gives_the_payload_that_to_bytes_encoded() {
 fn from_bytes_fails_on_an_extra_byte() {
     let mut bytes = payload().to_bytes();
     assert!(
-        Payload::from_bytes(&bytes).is_some(),
+        Payload::<Receiver>::from_bytes(&bytes).is_some(),
         "the premise is that the encoding decodes"
     );
 
     bytes.push(0);
 
-    assert_eq!(Payload::from_bytes(&bytes), None);
+    assert_eq!(Payload::<Receiver>::from_bytes(&bytes), None);
 }
 
 #[test]

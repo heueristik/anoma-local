@@ -10,7 +10,7 @@ use anoma_arm::Fr;
 use anoma_arm::belt::{Belt, MembershipPath};
 use anoma_arm::digest::Action;
 use anoma_arm::resource::{NullifierKey, RESOURCE_BYTES, Resource};
-use anoma_discovery::ReceiverKeys;
+use anoma_discovery::{Discovery, EciesDiscovery, ReceiverKeys};
 use anoma_integration_test::chain::Chain;
 use anoma_integration_test::fixtures::{self, token};
 use anoma_intent_pool::{IntentPool, MemoryIntentId, MemoryIntentPool, PooledIntent};
@@ -126,7 +126,7 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
         [(label(APPLE), 3, bob.commitment())]
     );
     assert_eq!(
-        received(&settlement.actions, &solver.keys),
+        received(&settlement.actions, &solver.secret_keys),
         [
             (label(APPLE), 1, sally.commitment()),
             (label(BANANA), 3, sally.commitment())
@@ -323,9 +323,10 @@ async fn ids(pool: &MemoryIntentPool) -> anyhow::Result<Vec<MemoryIntentId>> {
 }
 
 /// A solver that trades tokens of the trivial logic and keeps its surplus for `owner`.
-fn solver(owner: NullifierKey) -> Solver {
+fn solver(owner: NullifierKey) -> Solver<EciesDiscovery> {
     Solver {
-        keys: ReceiverKeys::random(),
+        discovery: EciesDiscovery,
+        secret_keys: ReceiverKeys::random(),
         owner,
         token_logic: Logic::trivial(),
     }
@@ -351,7 +352,7 @@ fn propose(
     owner: NullifierKey,
     (want_label, want_quantity): (u64, u128),
     receiver: &ReceiverKeys,
-    solver: &Solver,
+    solver: &Solver<EciesDiscovery>,
     seed: u64,
 ) -> anyhow::Result<Vec<ProvedAction>> {
     fixtures::propose(
@@ -360,7 +361,7 @@ fn propose(
         path,
         fixtures::terms(want_label, want_quantity, owner, seed)?,
         receiver.receiver(),
-        &solver.keys.receiver(),
+        &solver.secret_keys.receiver(),
         seed,
     )
 }
@@ -370,7 +371,8 @@ fn received(actions: &[Action], keys: &ReceiverKeys) -> Vec<(Fr, u128, Fr)> {
     let mut received: Vec<(Fr, u128, Fr)> = actions
         .iter()
         .filter_map(|action| {
-            anoma_discovery::discover(&action.created_app_data, keys)?
+            EciesDiscovery
+                .discover(&action.created_app_data, keys)?
                 .iter()
                 .filter_map(|bytes| {
                     Resource::from_bytes(<&[u8; RESOURCE_BYTES]>::try_from(bytes.as_slice()).ok()?)

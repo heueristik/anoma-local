@@ -35,8 +35,8 @@
 
 - **Intent**: an ephemeral resource whose label is the hash of its terms. Its creator gives up what the action consumes. The action that consumes the intent must create the resource of its terms.
 - **Terms**: each field of the resource that the creator of an intent wants, except the nonce: the kind, the value ref, the quantity, the nullifier key commitment of the receiver and the random seed. The nonce comes from the nullifier of the intent, so the receiver can compute the resource without a payload.
-- **Payload**: the data that a solver needs to fill an intent: the intent and its nullifier key, the terms, the offer, the rcv sum and the keys of the receiver. The creator encrypts it to the solver.
-- **Discovery**: how a receiver finds its resources, as in Anoma Galileo. The creator adds a discovery blob and the encrypted plaintext of the resource to its app data. The receiver tries to decrypt every discovery blob.
+- **Payload**: the data that a solver needs to fill an intent: the intent and its nullifier key, the terms, the offer, the rcv sum and the address of the receiver. The creator encrypts it to the solver.
+- **Discovery**: how a receiver finds its resources. The creator encrypts payloads in the app data of a resource to the **address** of the receiver, its public keys. The receiver finds its resources with its secret keys. In the scheme of Anoma Galileo, the creator adds a discovery blob and the encrypted plaintext of the resource, and the receiver tries to decrypt every discovery blob.
 - **Intent pool**: a list of unbalanced partial transactions. The pool checks nothing. A solver finds the intents whose payloads are for its keys, and checks the payload and the actions of an intent before it fills it.
 - **Solver**: a party that finds intents by discovery, chooses with CP-SAT the most intents that balance together, and proves the actions that fill them.
 - **Surplus**: what is left of a kind after the solver fills the chosen intents. The solver creates it for itself from an ephemeral resource of quantity 0.

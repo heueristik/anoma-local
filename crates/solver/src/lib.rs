@@ -6,9 +6,10 @@ pub mod matching;
 
 use std::collections::BTreeSet;
 
+use anoma_arm::digest::AppData;
 use anoma_arm::resource::{NullifierKey, Resource};
 use anoma_arm::{Fr, Scalar};
-use anoma_discovery::{ReceiverKeys, discover};
+use anoma_discovery::Discovery;
 use anoma_intent::Payload;
 use anoma_intent_pool::PooledIntent;
 use anoma_prover::PartialTransaction;
@@ -27,13 +28,15 @@ pub enum Error {
     Circuit(#[from] CircuitError),
     #[error(transparent)]
     Prove(#[from] anoma_prover::Error),
-    #[error(transparent)]
-    Discovery(#[from] anoma_discovery::Error),
+    #[error("cannot make the app data of a created resource: {0}")]
+    Discovery(Box<dyn std::error::Error + Send + Sync>),
 }
 
-/// A solver: its keys, the owner of its surplus, and the logic of the tokens that it trades.
-pub struct Solver {
-    pub keys: ReceiverKeys,
+/// A solver: its discovery scheme and its secret keys in it, the owner of its surplus, and the logic of the tokens that
+/// it trades.
+pub struct Solver<D: Discovery> {
+    pub discovery: D,
+    pub secret_keys: D::SecretKeys,
     pub owner: NullifierKey,
     /// The solver skips intents of tokens with other logics.
     pub token_logic: Logic,
@@ -47,13 +50,13 @@ pub struct Solution<Id> {
 }
 
 /// An intent that the solver can fill: its payload, and its actions as the payload checked them.
-struct Candidate<Id> {
+struct Candidate<Id, A> {
     id: Id,
-    payload: Payload,
+    payload: Payload<A>,
     partial: PartialTransaction,
 }
 
-impl Solver {
+impl<D: Discovery> Solver<D> {
     /// Fills the most of the intents that balance together. Its actions of ephemeral resources show
     /// `commitment_tree_root`, a recent root of the chain. Returns `None` if it fills none.
     pub fn solve<Id: Copy>(
@@ -68,15 +71,18 @@ impl Solver {
         ];
         let (token_logic_ref, intent_logic_ref) = (logic_keys[0].hash, logic_keys[1].hash);
         let mut nullifiers = BTreeSet::new();
-        let candidates: Vec<Candidate<Id>> = intents
+        let candidates: Vec<Candidate<Id, D::Address>> = intents
             .iter()
             .filter_map(|intent| {
                 intent
                     .actions
                     .iter()
-                    .filter_map(|proved| discover(&proved.action.created_app_data, &self.keys))
+                    .filter_map(|proved| {
+                        self.discovery
+                            .discover(&proved.action.created_app_data, &self.secret_keys)
+                    })
                     .flatten()
-                    .filter_map(|bytes| Payload::from_bytes(&bytes))
+                    .filter_map(|bytes| Payload::<D::Address>::from_bytes(&bytes))
                     .filter(|payload| {
                         payload.offer.logic_ref == token_logic_ref
                             && payload.terms.want_logic_ref == token_logic_ref
@@ -141,7 +147,7 @@ impl Solver {
     /// The action that consumes the intent and creates the resource of its terms for its receiver.
     fn fill(
         &self,
-        payload: &Payload,
+        payload: &Payload<D::Address>,
         intent_logic_ref: Fr,
         commitment_tree_root: Fr,
     ) -> Result<ActionWitness, Error> {
@@ -153,8 +159,7 @@ impl Solver {
             commitment_tree_root,
             Scalar::rand(&mut OsRng),
         )?;
-        witness.created_app_data =
-            anoma_discovery::app_data(&payload.receiver, &witness.created.to_bytes())?;
+        witness.created_app_data = self.app_data(&payload.receiver, &witness.created)?;
         Ok(witness)
     }
 
@@ -184,8 +189,15 @@ impl Solver {
             Scalar::rand(&mut OsRng),
         )?;
         witness.created_app_data =
-            anoma_discovery::app_data(&self.keys.receiver(), &witness.created.to_bytes())?;
+            self.app_data(&self.discovery.address(&self.secret_keys), &witness.created)?;
         Ok(witness)
+    }
+
+    /// The app data that makes `created` discoverable for the receiver of `address`, with its plaintext.
+    fn app_data(&self, address: &D::Address, created: &Resource) -> Result<AppData, Error> {
+        self.discovery
+            .app_data(address, &created.to_bytes())
+            .map_err(|error| Error::Discovery(Box::new(error)))
     }
 }
 
@@ -202,7 +214,7 @@ fn has_fresh_nullifiers(partial: &PartialTransaction, seen: &mut BTreeSet<Fr>) -
     fresh
 }
 
-fn order(payload: &Payload) -> Order {
+fn order<A>(payload: &Payload<A>) -> Order {
     Order {
         give: KindRef {
             logic_ref: payload.offer.logic_ref,

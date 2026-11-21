@@ -7,7 +7,7 @@ use anoma_arm::belt::{Belt, MembershipPath};
 use anoma_arm::digest::AppData;
 use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
 use anoma_arm::{Fr, Scalar};
-use anoma_discovery::Receiver;
+use anoma_discovery::{Discovery, EciesDiscovery, Receiver};
 use anoma_groth16_wrap::Groth16Wrapper;
 use anoma_intent::{Offer, Payload, Terms};
 use anoma_prover::action::{self, ActionWitness, Logic, Membership, ProvedAction};
@@ -165,6 +165,6 @@ pub fn propose(
         anoma_intent::created_logic()?,
         seed,
     )?;
-    witness.created_app_data = anoma_discovery::app_data(solver, &payload.to_bytes())?;
+    witness.created_app_data = EciesDiscovery.app_data(solver, &payload.to_bytes())?;
     Ok(action::prove(circuit_prover(), &witness)?.actions)
 }
