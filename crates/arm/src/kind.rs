@@ -5,12 +5,11 @@ use ark_ff::{Field, PrimeField};
 use crate::hash::{Domain, hash};
 use crate::{Fr, Point};
 
-/// The point of a kind, and the witness that the compliance circuit takes for it.
+/// The point of a kind, and the counter that the compliance circuit takes with its y coordinate to find it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Kind {
     pub base: Point,
     pub counter: Fr,
-    pub y: Fr,
 }
 
 impl Kind {
@@ -25,7 +24,6 @@ impl Kind {
                 return Self {
                     base: Point::new_unchecked(x, y),
                     counter,
-                    y,
                 };
             }
             counter += Fr::from(1u64);

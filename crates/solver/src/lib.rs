@@ -160,7 +160,7 @@ impl Solver {
             )?,
             consumed_app_data: AppData::default(),
             nullifier_key: payload.nullifier_key,
-            path: empty_path(),
+            path: MembershipPath::default(),
             commitment_tree_root: Belt::default().root(),
             created,
             created_logic: self.token_logic.clone(),
@@ -195,7 +195,7 @@ impl Solver {
             consumed_logic: self.token_logic.clone(),
             consumed_app_data: AppData::default(),
             nullifier_key: source,
-            path: empty_path(),
+            path: MembershipPath::default(),
             commitment_tree_root: Belt::default().root(),
             created,
             created_logic: self.token_logic.clone(),
@@ -221,14 +221,6 @@ fn order(payload: &Payload) -> Order {
             label_ref: payload.terms.want_label_ref,
         },
         min_quantity: payload.terms.min_quantity,
-    }
-}
-
-/// The path of an ephemeral resource, which the compliance circuit does not check.
-fn empty_path() -> MembershipPath {
-    MembershipPath {
-        siblings: Vec::new(),
-        sibling_is_left: Vec::new(),
     }
 }
 

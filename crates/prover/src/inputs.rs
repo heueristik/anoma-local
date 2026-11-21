@@ -76,7 +76,7 @@ impl From<anoma_arm::kind::Kind> for KindWitness {
     fn from(kind: anoma_arm::kind::Kind) -> Self {
         Self {
             counter: Field(kind.counter),
-            y: Field(kind.y),
+            y: Field(kind.base.y),
         }
     }
 }
@@ -95,16 +95,20 @@ impl TryFrom<&anoma_arm::belt::MembershipPath> for MembershipPath {
     fn try_from(path: &anoma_arm::belt::MembershipPath) -> Result<Self, Error> {
         let max = anoma_arm::belt::MAX_PATH_LENGTH;
         let length = path.siblings.len();
-        if length > max || path.sibling_is_left.len() != length {
-            return Err(Error::PathShape {
-                siblings: length,
-                sides: path.sibling_is_left.len(),
-                max,
-            });
+        if length > max {
+            return Err(Error::PathTooLong { length, max });
         }
-        let mut siblings = fields(&path.siblings);
+        let mut siblings: Vec<Field> = path
+            .siblings
+            .iter()
+            .map(|sibling| Field(sibling.hash))
+            .collect();
         siblings.resize(max, Field(Fr::from(0u64)));
-        let mut sibling_is_left = path.sibling_is_left.clone();
+        let mut sibling_is_left: Vec<bool> = path
+            .siblings
+            .iter()
+            .map(|sibling| sibling.is_left)
+            .collect();
         sibling_is_left.resize(max, false);
         Ok(Self {
             siblings,

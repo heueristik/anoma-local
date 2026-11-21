@@ -15,35 +15,34 @@ pub struct Belt {
     leaves: Vec<Fr>,
 }
 
-/// The siblings from a leaf up to the root, each with its side.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// The siblings from a leaf up to the root. The path of an ephemeral resource is empty.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MembershipPath {
-    pub siblings: Vec<Fr>,
-    pub sibling_is_left: Vec<bool>,
+    pub siblings: Vec<Sibling>,
+}
+
+/// A node next to the path, and whether it is the left child of their parent.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Sibling {
+    pub hash: Fr,
+    pub is_left: bool,
 }
 
 impl MembershipPath {
     pub fn root(&self, leaf: Fr) -> Fr {
-        self.siblings
-            .iter()
-            .zip(&self.sibling_is_left)
-            .fold(leaf, |node, (&sibling, &is_left)| {
-                if is_left {
-                    node_hash(sibling, node)
-                } else {
-                    node_hash(node, sibling)
-                }
-            })
+        self.siblings.iter().fold(leaf, |node, sibling| {
+            if sibling.is_left {
+                node_hash(sibling.hash, node)
+            } else {
+                node_hash(node, sibling.hash)
+            }
+        })
     }
 }
 
 impl Belt {
     pub fn append(&mut self, leaves: &[Fr]) {
         self.leaves.extend_from_slice(leaves);
-    }
-
-    pub fn leaf_count(&self) -> usize {
-        self.leaves.len()
     }
 
     /// The root, or zero for the belt without leaves.
@@ -61,19 +60,17 @@ impl Belt {
                 leaf_count: self.leaves.len(),
             });
         };
-        let mut path = MembershipPath {
-            siblings: Vec::new(),
-            sibling_is_left: Vec::new(),
-        };
+        let mut path = MembershipPath::default();
         let mut node = leaf;
         while let Some(parent) = tree.nodes[node].parent {
             let (left, right) = tree.nodes[parent]
                 .children
                 .expect("a parent has two children");
             let is_left = right == node;
-            path.siblings
-                .push(tree.nodes[if is_left { left } else { right }].hash);
-            path.sibling_is_left.push(is_left);
+            path.siblings.push(Sibling {
+                hash: tree.nodes[if is_left { left } else { right }].hash,
+                is_left,
+            });
             node = parent;
         }
         if path.siblings.len() > MAX_PATH_LENGTH {

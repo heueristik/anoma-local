@@ -93,13 +93,7 @@ pub fn action(
     let (path, commitment_tree_root) = match membership {
         Membership::Tree { path, root } => (path, root),
         // The root of the empty tree is a historical root of every AnomaVerifier.
-        Membership::Ephemeral => (
-            MembershipPath {
-                siblings: Vec::new(),
-                sibling_is_left: Vec::new(),
-            },
-            Fr::from(0u64),
-        ),
+        Membership::Ephemeral => (MembershipPath::default(), Fr::from(0u64)),
     };
     Ok(ActionWitness {
         consumed,

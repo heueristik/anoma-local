@@ -79,10 +79,7 @@ pub fn ephemeral_action(
         consumed_logic: Logic::trivial(),
         consumed_app_data: AppData::default(),
         nullifier_key: nullifier_key(seed),
-        path: MembershipPath {
-            siblings: Vec::new(),
-            sibling_is_left: Vec::new(),
-        },
+        path: MembershipPath::default(),
         commitment_tree_root: Fr::from(0u64),
         created,
         created_logic: Logic::trivial(),

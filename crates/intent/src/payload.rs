@@ -7,7 +7,6 @@ use anoma_arm::{Fr, Point, Scalar};
 use anoma_discovery::{PublicKey, Receiver};
 use anoma_prover::action::ProvedAction;
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{BigInteger, PrimeField};
 
 use crate::Terms;
 
@@ -64,7 +63,7 @@ impl Payload {
             bytes.extend_from_slice(&to_bytes(field));
         }
         bytes.extend_from_slice(&self.offer.quantity.to_be_bytes());
-        bytes.extend_from_slice(&self.rcv_total.into_bigint().to_bytes_be());
+        bytes.extend_from_slice(&to_bytes(self.rcv_total));
         bytes.extend_from_slice(&self.receiver.discovery_key.to_bytes());
         bytes.extend_from_slice(&self.receiver.encryption_key.to_bytes());
         bytes
@@ -84,11 +83,7 @@ impl Payload {
             label_ref: reader.field()?,
             quantity: u128::from_be_bytes(reader.take()?),
         };
-        let rcv: [u8; 32] = reader.take()?;
-        let rcv_total = Scalar::from_be_bytes_mod_order(&rcv);
-        if rcv_total.into_bigint().to_bytes_be() != rcv {
-            return None;
-        }
+        let rcv_total = from_bytes(reader.take()?).ok()?;
         let receiver = Receiver {
             discovery_key: PublicKey::from_bytes(reader.take()?)?,
             encryption_key: PublicKey::from_bytes(reader.take()?)?,

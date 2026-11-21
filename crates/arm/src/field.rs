@@ -5,16 +5,16 @@ use ark_ff::{BigInteger, PrimeField};
 
 use crate::{Error, Fr, Point, Scalar};
 
-/// The 32 big-endian bytes of a field element, as the contract stores a tag.
-pub fn to_bytes(value: Fr) -> [u8; 32] {
+/// The 32 big-endian bytes of an element of a BN254 or Grumpkin field, as the contract stores a tag.
+pub fn to_bytes<F: PrimeField>(value: F) -> [u8; 32] {
     let mut bytes = [0; 32];
     bytes.copy_from_slice(&value.into_bigint().to_bytes_be());
     bytes
 }
 
 /// The field element of 32 big-endian bytes, if they are smaller than the modulus.
-pub fn from_bytes(bytes: [u8; 32]) -> Result<Fr, Error> {
-    let value = Fr::from_be_bytes_mod_order(&bytes);
+pub fn from_bytes<F: PrimeField>(bytes: [u8; 32]) -> Result<F, Error> {
+    let value = F::from_be_bytes_mod_order(&bytes);
     if to_bytes(value) == bytes {
         Ok(value)
     } else {

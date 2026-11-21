@@ -28,14 +28,8 @@ pub enum Error {
         circuit: String,
         source: toml::ser::Error,
     },
-    #[error(
-        "the path has {siblings} siblings and {sides} sides, but needs one side for each sibling and at most {max} siblings"
-    )]
-    PathShape {
-        siblings: usize,
-        sides: usize,
-        max: usize,
-    },
+    #[error("the membership path has {length} siblings, more than the largest path length {max}")]
+    PathTooLong { length: usize, max: usize },
     #[error("{circuit} has {count} public inputs, expected {expected}")]
     PublicInputCount {
         circuit: String,
