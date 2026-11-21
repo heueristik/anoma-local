@@ -19,6 +19,7 @@ The terms are in [CONTEXT.md](CONTEXT.md).
 | `crates/intent` | The intent resource, its logic, and the payload for the solver |
 | `crates/token` | The token resource and its logic, whose owner or issuer signs with a P-256 key |
 | `crates/intent-pool` | The `IntentPool` trait, and a pool in memory |
+| `crates/nostr-intent-pool` | An `IntentPool` on Nostr relays, with the proved actions of each intent in a Blossom blob |
 | `crates/solver` | A solver of intents, the `Matcher` trait, and a matcher with the CP-SAT solver of OR-Tools |
 | `crates/bindings` | The Rust bindings of the `AnomaVerifier` |
 | `crates/belt-ffi` | The commitment tree of `crates/arm` as a command, which the differential contract tests run |
@@ -36,7 +37,7 @@ The resource machine in `crates/arm`, the provers of actions and transactions, t
 | `ResourceLogic` | `anoma_prover::resource_logic` | `TrivialLogic`, `IntentLogic` in `crates/intent`, `TokenLogic` in `crates/token` | Names the circuit of a logic, and makes its private inputs from the action of its resource |
 | `Signer` | `anoma_token` | Each P-256 key that signs messages with ECDSA over SHA-256, such as `p256::ecdsa::SigningKey` | Signs the action tree root for the owner or the issuer of a token |
 | `Discovery` | `anoma_discovery` | `GrumpkinDiscovery` | Makes a created resource discoverable for its receiver, and finds the resources of a receiver |
-| `IntentPool` | `anoma_intent_pool` | `MemoryIntentPool` | Holds the intents for the solvers until the chain executes their fills |
+| `IntentPool` | `anoma_intent_pool` | `MemoryIntentPool`, `NostrIntentPool` in `crates/nostr-intent-pool` | Holds the intents for the solvers until the chain executes their fills |
 | `Matcher` | `anoma_solver::matching` | `CpSatMatcher` | Chooses the intents that balance together |
 
 Each implementation must keep these constraints:
