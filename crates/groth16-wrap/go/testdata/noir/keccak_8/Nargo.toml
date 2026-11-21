@@ -1,0 +1,6 @@
+[package]
+name = "keccak_8"
+type = "bin"
+authors = [""]
+
+[dependencies]

@@ -1,0 +1,6 @@
+[package]
+name = "pub_3"
+type = "bin"
+authors = [""]
+
+[dependencies]

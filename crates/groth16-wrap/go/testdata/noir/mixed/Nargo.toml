@@ -1,0 +1,6 @@
+[package]
+name = "mixed"
+type = "bin"
+authors = [""]
+
+[dependencies]

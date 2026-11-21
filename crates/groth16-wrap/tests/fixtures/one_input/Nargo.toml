@@ -1,0 +1,6 @@
+[package]
+name = "one_input"
+type = "bin"
+authors = [""]
+
+[dependencies]

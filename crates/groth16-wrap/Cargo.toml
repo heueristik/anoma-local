@@ -1,0 +1,18 @@
+[package]
+name = "anoma-groth16-wrap"
+description = "Wraps a bb 6.0.0 UltraHonk proof into a Groth16 proof over BN254 that an EVM contract checks"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+
+[features]
+# Runs the tests that need the single-party setup, which takes minutes and up to 13 GB of memory.
+slow-tests = []
+
+[dependencies]
+thiserror = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }

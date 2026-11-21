@@ -11,6 +11,7 @@ homepage = "https://anoma.net/"
 
 [workspace.dependencies]
 acir_field = "1.0.0"
+anyhow = "1.0.104"
 ark-bn254 = { version = "0.6.0", default-features = false, features = ["scalar_field"] }
 ark-ec = "0.6.0"
 ark-ff = "0.6.0"
