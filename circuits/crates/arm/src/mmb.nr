@@ -16,11 +16,13 @@ impl MembershipPath {
         assert(self.length <= MAX_PATH_LENGTH, "the path is longer than the largest path length");
         let mut node = leaf;
         for i in 0..MAX_PATH_LENGTH {
-            let parent = if self.sibling_is_left[i] {
-                node_hash(self.siblings[i], node)
+            // The swap comes before the hash, so that each level runs one hash and not one for each branch.
+            let (left, right) = if self.sibling_is_left[i] {
+                (self.siblings[i], node)
             } else {
-                node_hash(node, self.siblings[i])
+                (node, self.siblings[i])
             };
+            let parent = node_hash(left, right);
             if i < self.length {
                 node = parent;
             }
