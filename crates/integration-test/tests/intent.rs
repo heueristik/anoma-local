@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use anoma_arm::Fr;
 use anoma_arm::Scalar;
 use anoma_arm::belt::Belt;
-use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
+use anoma_arm::resource::{NullifierKey, Resource};
 use anoma_bindings::conversion::word;
 use anoma_integration_test::chain::Chain;
 use anoma_integration_test::fixtures::{
@@ -178,21 +178,14 @@ impl Intent {
         created: Resource,
         rcv: u64,
     ) -> anyhow::Result<ActionWitness> {
-        let created = Resource {
-            nonce: created_nonce(intent.nullifier(self.nullifier_key)?),
-            ..created
-        };
-        let logic =
-            anoma_intent::consumed_logic(intent, self.nullifier_key, &self.terms()?, &created)?;
-        build_action(
-            *intent,
-            logic,
+        Ok(anoma_intent::fill(
+            intent,
             self.nullifier_key,
-            None,
+            &self.terms()?,
             created,
             Logic::trivial(),
-            rcv,
-        )
+            Scalar::from(rcv),
+        )?)
     }
 }
 

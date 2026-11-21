@@ -1,12 +1,13 @@
 //! What a party gives the solvers with an intent, in the resource payload of the intent resource.
 
+use anoma_arm::delta::unit_delta;
 use anoma_arm::field::{from_bytes, to_bytes};
 use anoma_arm::kind::Kind;
-use anoma_arm::resource::{NullifierKey, RESOURCE_BYTES, Resource};
-use anoma_arm::{Fr, Point, Scalar};
+use anoma_arm::resource::{NullifierKey, Resource};
+use anoma_arm::{Fr, Scalar};
 use anoma_discovery::{PublicKey, Receiver};
+use anoma_prover::PartialTransaction;
 use anoma_prover::action::ProvedAction;
-use ark_ec::{AffineRepr, CurveGroup};
 
 use crate::Terms;
 
@@ -18,11 +19,12 @@ pub struct Offer {
     pub quantity: u128,
 }
 
-/// The intent and what opens it, what the actions give up, the rcv sum that opens their delta, and the keys that
-/// receive the resource that fills the terms.
+/// The fields of the intent that its terms do not fix, what the actions give up, the rcv sum that opens their delta,
+/// and the keys that receive the resource that fills the terms.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Payload {
-    pub intent: Resource,
+    pub nonce: Fr,
+    pub rand_seed: Fr,
     pub nullifier_key: NullifierKey,
     pub terms: Terms,
     pub offer: Offer,
@@ -31,15 +33,11 @@ pub struct Payload {
 }
 
 /// The length of an encoded payload.
-const PAYLOAD_BYTES: usize = RESOURCE_BYTES + 32 + (3 * 32 + 16) + (2 * 32 + 16) + 32 + 2 * 33;
+const PAYLOAD_BYTES: usize = 3 * 32 + (3 * 32 + 16) + (2 * 32 + 16) + 32 + 2 * 33;
 
 /// Why a payload does not describe the actions of its intent.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum Mismatch {
-    #[error("the intent does not have the intent logic, the label of its terms and the quantity 1")]
-    Intent,
-    #[error("the nullifier key does not open the intent")]
-    NullifierKey,
     #[error("no action creates the intent")]
     NotCreated,
     #[error("the delta of the actions is not the offer minus the intent")]
@@ -49,9 +47,10 @@ pub enum Mismatch {
 impl Payload {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(PAYLOAD_BYTES);
-        bytes.extend_from_slice(&self.intent.to_bytes());
-        bytes.extend_from_slice(&to_bytes(self.nullifier_key.0));
         for field in [
+            self.nonce,
+            self.rand_seed,
+            self.nullifier_key.0,
             self.terms.want_logic_ref,
             self.terms.want_label_ref,
             self.terms.receiver_nullifier_key_commitment,
@@ -72,7 +71,8 @@ impl Payload {
     /// The payload of bytes that `to_bytes` wrote, or `None` for other bytes.
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         let mut reader = Reader(bytes);
-        let intent = Resource::from_bytes(&reader.take()?).ok()?;
+        let nonce = reader.field()?;
+        let rand_seed = reader.field()?;
         let nullifier_key = NullifierKey(reader.field()?);
         let want_logic_ref = reader.field()?;
         let want_label_ref = reader.field()?;
@@ -89,7 +89,8 @@ impl Payload {
             encryption_key: PublicKey::from_bytes(reader.take()?)?,
         };
         reader.0.is_empty().then_some(Self {
-            intent,
+            nonce,
+            rand_seed,
             nullifier_key,
             terms: Terms {
                 want_logic_ref,
@@ -103,19 +104,24 @@ impl Payload {
         })
     }
 
+    /// The intent of the payload, with `intent_logic_ref` as the key hash of the intent logic.
+    pub fn intent(&self, intent_logic_ref: Fr) -> Resource {
+        self.terms.intent(
+            intent_logic_ref,
+            self.nullifier_key,
+            self.nonce,
+            self.rand_seed,
+        )
+    }
+
     /// Checks that the payload describes the actions: they create the intent, and their delta is the offer minus
-    /// the intent, opened by the rcv sum. The solver can then fill the terms and keep the offer.
-    pub fn check(&self, actions: &[ProvedAction], intent_logic_ref: Fr) -> Result<(), Mismatch> {
-        let intent = &self.intent;
-        if intent.logic_ref != intent_logic_ref
-            || intent.label_ref != self.terms.hash()
-            || intent.quantity != 1
-        {
-            return Err(Mismatch::Intent);
-        }
-        intent
-            .nullifier(self.nullifier_key)
-            .map_err(|_| Mismatch::NullifierKey)?;
+    /// the intent, opened by the rcv sum. Returns the actions as the partial transaction that the solver composes.
+    pub fn check(
+        &self,
+        actions: &[ProvedAction],
+        intent_logic_ref: Fr,
+    ) -> Result<PartialTransaction, Mismatch> {
+        let intent = self.intent(intent_logic_ref);
         let commitment = intent.commitment();
         if !actions
             .iter()
@@ -123,17 +129,21 @@ impl Payload {
         {
             return Err(Mismatch::NotCreated);
         }
-        let delta = actions
-            .iter()
-            .fold(Point::zero().into_group(), |sum, proved| sum + proved.delta);
-        let offer = Kind::new(self.offer.logic_ref, self.offer.label_ref).base;
-        let expected = offer * Scalar::from(self.offer.quantity)
-            - Kind::new(intent.logic_ref, intent.label_ref).base
-            + Point::generator() * self.rcv_total;
-        if delta.into_affine() != expected.into_affine() {
+        let partial = PartialTransaction {
+            actions: actions.to_vec(),
+            rcv_total: self.rcv_total,
+        };
+        let expected = unit_delta(
+            Kind::new(self.offer.logic_ref, self.offer.label_ref).base,
+            self.offer.quantity,
+            Kind::new(intent.logic_ref, intent.label_ref).base,
+            intent.quantity,
+            self.rcv_total,
+        );
+        if partial.delta() != expected {
             return Err(Mismatch::Delta);
         }
-        Ok(())
+        Ok(partial)
     }
 }
 

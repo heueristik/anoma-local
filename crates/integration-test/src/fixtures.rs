@@ -122,12 +122,10 @@ pub fn propose(
     solver: &Receiver,
     seed: u64,
 ) -> anyhow::Result<Vec<ProvedAction>> {
-    let intent_key = NullifierKey(Fr::from(seed));
-    let nonce = created_nonce(token.nullifier(owner)?);
-    let intent = terms.intent(intent_logic_ref()?, intent_key, nonce, Fr::from(seed));
     let payload = Payload {
-        intent,
-        nullifier_key: intent_key,
+        nonce: created_nonce(token.nullifier(owner)?),
+        rand_seed: Fr::from(seed),
+        nullifier_key: NullifierKey(Fr::from(seed)),
         terms,
         offer: Offer {
             logic_ref: token.logic_ref,
@@ -142,7 +140,7 @@ pub fn propose(
         Logic::trivial(),
         owner,
         Some(path),
-        intent,
+        payload.intent(intent_logic_ref()?),
         anoma_intent::created_logic()?,
         seed,
     )?;

@@ -1,7 +1,7 @@
 //! The choice of the intents to fill, as an integer program for CP-SAT: one Boolean for each intent, and for each kind
 //! the constraint that the filled intents give at least the minimums that they want.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anoma_arm::Fr;
 use cp_sat::builder::{CpModelBuilder, LinearExpr};
@@ -23,6 +23,14 @@ pub struct Order {
     pub min_quantity: u128,
 }
 
+/// The orders to fill, by index, and what is left of each kind after each filled order gets its minimum.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Matching {
+    pub chosen: Vec<usize>,
+    /// The kinds with a surplus above 0.
+    pub surplus: BTreeMap<KindRef, u128>,
+}
+
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum Error {
     #[error("order {index} has a quantity above the largest integer of CP-SAT, 2^63 - 1")]
@@ -31,9 +39,8 @@ pub enum Error {
     Status(CpSolverStatus),
 }
 
-/// The indices of the most orders that balance together, if each filled order gets its minimum and the solver keeps
-/// the rest.
-pub fn solve(orders: &[Order]) -> Result<Vec<usize>, Error> {
+/// The most orders that balance together, if each filled order gets its minimum and the solver keeps the surplus.
+pub fn solve(orders: &[Order]) -> Result<Matching, Error> {
     let quantities = orders
         .iter()
         .enumerate()
@@ -72,13 +79,27 @@ pub fn solve(orders: &[Order]) -> Result<Vec<usize>, Error> {
     );
 
     let response = model.solve();
-    match response.status() {
-        CpSolverStatus::Optimal | CpSolverStatus::Feasible => Ok(fill
-            .iter()
-            .enumerate()
-            .filter(|(_, filled)| filled.solution_value(&response))
-            .map(|(index, _)| index)
-            .collect()),
-        status => Err(Error::Status(status)),
+    let status = response.status();
+    if !matches!(status, CpSolverStatus::Optimal | CpSolverStatus::Feasible) {
+        return Err(Error::Status(status));
     }
+    let chosen: Vec<usize> = fill
+        .iter()
+        .enumerate()
+        .filter(|(_, filled)| filled.solution_value(&response))
+        .map(|(index, _)| index)
+        .collect();
+    // The constraints keep each balance at 0 or above.
+    let mut balances: BTreeMap<KindRef, u128> = BTreeMap::new();
+    for &index in &chosen {
+        *balances.entry(orders[index].give).or_default() += orders[index].give_quantity;
+    }
+    for &index in &chosen {
+        *balances.entry(orders[index].want).or_default() -= orders[index].min_quantity;
+    }
+    balances.retain(|_, surplus| *surplus > 0);
+    Ok(Matching {
+        chosen,
+        surplus: balances,
+    })
 }

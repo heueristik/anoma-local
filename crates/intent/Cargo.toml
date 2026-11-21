@@ -11,8 +11,6 @@ homepage = { workspace = true }
 anoma-arm = { workspace = true }
 anoma-discovery = { workspace = true }
 anoma-prover = { workspace = true }
-ark-ec = { workspace = true }
-ark-ff = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }

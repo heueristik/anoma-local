@@ -1,5 +1,6 @@
 use anoma_arm::Fr;
 use anoma_solver::matching::{Error, KindRef, Order, solve};
+use std::collections::BTreeMap;
 
 fn kind(label: u64) -> KindRef {
     KindRef {
@@ -25,7 +26,13 @@ fn order(give: u64, give_quantity: u128, want: u64, min_quantity: u128) -> Order
 fn solve_fills_two_orders_that_give_at_least_what_the_other_wants() -> anyhow::Result<()> {
     let orders = [order(APPLE, 4, BANANA, 4), order(BANANA, 7, APPLE, 3)];
 
-    assert_eq!(solve(&orders)?, [0, 1]);
+    let matching = solve(&orders)?;
+
+    assert_eq!(matching.chosen, [0, 1]);
+    assert_eq!(
+        matching.surplus,
+        BTreeMap::from([(kind(APPLE), 4 - 3), (kind(BANANA), 7 - 4)])
+    );
     Ok(())
 }
 
@@ -37,7 +44,14 @@ fn solve_fills_a_ring_of_three_orders_of_which_no_two_balance() -> anyhow::Resul
         order(CHERRY, 2, APPLE, 2),
     ];
 
-    assert_eq!(solve(&orders)?, [0, 1, 2]);
+    let matching = solve(&orders)?;
+
+    assert_eq!(matching.chosen, [0, 1, 2]);
+    assert_eq!(
+        matching.surplus,
+        BTreeMap::new(),
+        "each order gives what the next wants"
+    );
     Ok(())
 }
 
@@ -49,13 +63,13 @@ fn solve_leaves_an_order_whose_minimum_no_other_order_gives() -> anyhow::Result<
         order(CHERRY, 5, APPLE, 10),
     ];
 
-    assert_eq!(solve(&orders)?, [0, 1]);
+    assert_eq!(solve(&orders)?.chosen, [0, 1]);
     Ok(())
 }
 
 #[test]
 fn solve_fills_no_order_of_a_single_party() -> anyhow::Result<()> {
-    assert_eq!(solve(&[order(APPLE, 4, BANANA, 4)])?, Vec::<usize>::new());
+    assert_eq!(solve(&[order(APPLE, 4, BANANA, 4)])?, Default::default());
     Ok(())
 }
 

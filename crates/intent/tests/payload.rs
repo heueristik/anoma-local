@@ -19,12 +19,8 @@ fn payload() -> Payload {
     };
     let nullifier_key = NullifierKey(Fr::from(5u64));
     Payload {
-        intent: terms.intent(
-            Fr::from(INTENT_LOGIC_REF),
-            nullifier_key,
-            Fr::from(6u64),
-            Fr::from(7u64),
-        ),
+        nonce: Fr::from(6u64),
+        rand_seed: Fr::from(7u64),
         nullifier_key,
         terms,
         offer: Offer {
@@ -39,19 +35,20 @@ fn payload() -> Payload {
 
 /// The action that gives up `quantity` of the offered kind and creates the intent, with empty proofs.
 fn giving_action(payload: &Payload, quantity: u128) -> ProvedAction {
+    let intent = payload.intent(Fr::from(INTENT_LOGIC_REF));
     let offer = Kind::new(payload.offer.logic_ref, payload.offer.label_ref).base;
-    let intent = Kind::new(payload.intent.logic_ref, payload.intent.label_ref).base;
+    let intent_kind = Kind::new(intent.logic_ref, intent.label_ref).base;
     ProvedAction {
         action: Action {
             nullifier: Fr::from(12u64),
             consumed_logic_ref: payload.offer.logic_ref,
             consumed_app_data: AppData::default(),
-            commitment: payload.intent.commitment(),
-            created_logic_ref: payload.intent.logic_ref,
+            commitment: intent.commitment(),
+            created_logic_ref: intent.logic_ref,
             created_app_data: AppData::default(),
             commitment_tree_root: Fr::from(0u64),
         },
-        delta: unit_delta(offer, quantity, intent, 1, payload.rcv_total),
+        delta: unit_delta(offer, quantity, intent_kind, 1, payload.rcv_total),
         compliance_proof: Proof::default(),
         consumed_logic_proof: LogicProof::default(),
         created_logic_proof: LogicProof::default(),
@@ -79,12 +76,16 @@ fn from_bytes_fails_on_an_extra_byte() {
 }
 
 #[test]
-fn check_accepts_an_action_that_gives_up_the_offer_for_the_intent() {
+fn check_gives_the_actions_that_give_up_the_offer_for_the_intent() -> Result<(), Mismatch> {
     let payload = payload();
 
     let actions = [giving_action(&payload, payload.offer.quantity)];
 
-    assert_eq!(payload.check(&actions, Fr::from(INTENT_LOGIC_REF)), Ok(()));
+    let partial = payload.check(&actions, Fr::from(INTENT_LOGIC_REF))?;
+
+    assert_eq!(partial.actions, actions);
+    assert_eq!(partial.rcv_total, payload.rcv_total);
+    Ok(())
 }
 
 #[test]
@@ -119,6 +120,6 @@ fn check_errors_on_an_intent_of_another_logic() {
 
     assert_eq!(
         payload.check(&actions, Fr::from(INTENT_LOGIC_REF + 1)),
-        Err(Mismatch::Intent)
+        Err(Mismatch::NotCreated)
     );
 }

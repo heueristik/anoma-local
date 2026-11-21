@@ -5,10 +5,12 @@ mod payload;
 
 pub use payload::{Mismatch, Offer, Payload};
 
-use anoma_arm::Fr;
+use anoma_arm::digest::AppData;
 use anoma_arm::hash::poseidon2_hash;
-use anoma_arm::resource::{NullifierKey, Resource};
-use anoma_prover::action::Logic;
+use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
+use anoma_arm::{Fr, Scalar};
+use anoma_prover::Error;
+use anoma_prover::action::{ActionWitness, Logic};
 use anoma_prover::inputs::{self, Field, Quantity};
 use serde::Serialize;
 
@@ -56,8 +58,35 @@ impl Terms {
     }
 }
 
+/// The action that consumes `intent` and creates `created` with `created_logic`, as the terms want. It sets the nonce of
+/// `created`.
+pub fn fill(
+    intent: &Resource,
+    nullifier_key: NullifierKey,
+    terms: &Terms,
+    created: Resource,
+    created_logic: Logic,
+    rcv: Scalar,
+) -> Result<ActionWitness, Error> {
+    let created = Resource {
+        nonce: created_nonce(intent.nullifier(nullifier_key)?),
+        ..created
+    };
+    Ok(ActionWitness {
+        consumed: *intent,
+        consumed_logic: consumed_logic(intent, nullifier_key, terms, &created)?,
+        consumed_app_data: AppData::default(),
+        nullifier_key,
+        path: None,
+        created,
+        created_logic,
+        created_app_data: AppData::default(),
+        rcv,
+    })
+}
+
 /// The logic of a created intent. It checks nothing, but nargo needs a value for each private input.
-pub fn created_logic() -> Result<Logic, toml::ser::Error> {
+pub fn created_logic() -> Result<Logic, Error> {
     let zero = Resource {
         logic_ref: Fr::from(0u64),
         label_ref: Fr::from(0u64),
@@ -84,7 +113,7 @@ pub fn consumed_logic(
     nullifier_key: NullifierKey,
     terms: &Terms,
     created: &Resource,
-) -> Result<Logic, toml::ser::Error> {
+) -> Result<Logic, Error> {
     let witness = Witness {
         intent: intent.into(),
         nullifier_key: Field(nullifier_key.0),
@@ -98,7 +127,10 @@ pub fn consumed_logic(
     };
     Ok(Logic {
         circuit: CIRCUIT.to_string(),
-        witness: toml::Table::try_from(witness)?,
+        witness: toml::Table::try_from(witness).map_err(|source| Error::Inputs {
+            circuit: CIRCUIT.to_string(),
+            source,
+        })?,
     })
 }
 
