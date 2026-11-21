@@ -3,6 +3,13 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 nargo := env("NARGO", "nargo")
 bb := env("BB", "bb")
+ortools_version := "9.15.6755"
+
+# The OR-Tools C++ library that the solver links, which `just crates-tooling` installs
+export ORTOOLS_PREFIX := env("ORTOOLS_PREFIX", home_directory() / ".ortools" / ("v" + ortools_version))
+
+# The protobuf compiler for the build of `cp_sat`; the OR-Tools archive has one
+export PROTOC := env("PROTOC", ORTOOLS_PREFIX / "bin" / "protoc")
 
 # Default recipe
 default:
@@ -116,6 +123,22 @@ circuits-keys-check: circuits-keys
 circuits-check: circuits-fmt-check circuits-keys-check circuits-test
 
 # --- Crates ---
+
+# Install the OR-Tools C++ library for arm64 macOS, which the solver links
+crates-tooling:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -f "$ORTOOLS_PREFIX/include/ortools/sat/cp_model.h" ]; then exit 0; fi
+    if [ "$(uname -sm)" != "Darwin arm64" ]; then
+        echo "no OR-Tools archive for $(uname -sm); install OR-Tools {{ ortools_version }} and set ORTOOLS_PREFIX" >&2
+        exit 1
+    fi
+    archive="or-tools_arm64_macOS-26.2_cpp_v{{ ortools_version }}.tar.gz"
+    download=$(mktemp -d)
+    curl -fsSL -o "$download/$archive" "https://github.com/google/or-tools/releases/download/v9.15/$archive"
+    echo "de0400a45939a66ee13cd8360c230e830fc5e03a6ed5a8a8b60f58a39e4a67bc  $download/$archive" | shasum -a 256 -c -
+    mkdir -p "$ORTOOLS_PREFIX"
+    tar -xzf "$download/$archive" -C "$ORTOOLS_PREFIX" --strip-components 1
 
 # Build the crates
 crates-build *args:
