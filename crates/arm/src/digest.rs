@@ -5,79 +5,7 @@ use ark_ff::PrimeField;
 use sha2::{Digest, Sha256};
 
 use crate::Fr;
-use crate::field::to_bytes;
-
-/// Whether the contract emits a blob in an event.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DeletionCriterion {
-    Immediately = 0,
-    Never = 1,
-}
-
-/// A blob and its deletion criterion.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Blob {
-    pub deletion_criterion: DeletionCriterion,
-    pub bytes: Vec<u8>,
-}
-
-/// The application data of a resource, as four lists of blobs, in the order of the contract's `AppData`.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct AppData {
-    pub resource_payload: Vec<Blob>,
-    pub discovery_payload: Vec<Blob>,
-    pub external_payload: Vec<Blob>,
-    pub application_payload: Vec<Blob>,
-}
-
-impl AppData {
-    /// The low 253 bits of the SHA-256 hash of the four payloads; each is a 4-byte blob count, then for each blob its
-    /// 1-byte deletion criterion, its 4-byte length and its bytes.
-    pub fn hash(&self) -> Fr {
-        let mut packed = Vec::new();
-        for payload in [
-            &self.resource_payload,
-            &self.discovery_payload,
-            &self.external_payload,
-            &self.application_payload,
-        ] {
-            packed.extend_from_slice(&length(payload.len()));
-            for blob in payload {
-                packed.push(blob.deletion_criterion as u8);
-                packed.extend_from_slice(&length(blob.bytes.len()));
-                packed.extend_from_slice(&blob.bytes);
-            }
-        }
-        low_253_bits(Sha256::digest(&packed).into())
-    }
-}
-
-/// An action as the contract takes it: the tag, logic ref and app data of each resource, and the root of the
-/// commitment tree that holds the consumed resource.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Action {
-    pub nullifier: Fr,
-    pub consumed_logic_ref: Fr,
-    pub consumed_app_data: AppData,
-    pub commitment: Fr,
-    pub created_logic_ref: Fr,
-    pub created_app_data: AppData,
-    pub commitment_tree_root: Fr,
-}
-
-impl Action {
-    pub fn instance(&self) -> ActionInstance {
-        ActionInstance {
-            nullifier: self.nullifier,
-            consumed_logic_ref: self.consumed_logic_ref,
-            consumed_app_data_hash: self.consumed_app_data.hash(),
-            commitment: self.commitment,
-            created_logic_ref: self.created_logic_ref,
-            created_app_data_hash: self.created_app_data.hash(),
-            commitment_tree_root: self.commitment_tree_root,
-        }
-    }
-}
+use crate::field::{low_253_bits, to_bytes};
 
 /// The public data of one action, in the order of the contract's `Action`, with each app data replaced by its hash.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -136,16 +64,4 @@ pub fn extend(digest: Fr, action: &ActionInstance) -> Fr {
 /// The digest of all actions of a transaction, which is the public input of its final proof.
 pub fn action_digest(actions: &[ActionInstance]) -> Fr {
     actions.iter().fold(Fr::from(0u64), extend)
-}
-
-fn low_253_bits(mut hash: [u8; 32]) -> Fr {
-    hash[0] &= 0x1f;
-    Fr::from_be_bytes_mod_order(&hash)
-}
-
-/// A count or length as 4 big-endian bytes; no payload of a transaction reaches 2^32 bytes.
-fn length(value: usize) -> [u8; 4] {
-    u32::try_from(value)
-        .expect("a payload has fewer than 2^32 blobs and bytes")
-        .to_be_bytes()
 }

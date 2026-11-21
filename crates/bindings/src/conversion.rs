@@ -2,7 +2,8 @@
 
 use alloy::primitives::{B256, Bytes};
 use anoma_arm::Fr;
-use anoma_arm::digest::{Action, AppData, Blob};
+use anoma_arm::action::Action;
+use anoma_arm::app_data::{AppData, Blob};
 use anoma_arm::field::to_bytes;
 
 use crate::generated::anoma_verifier::IAnomaVerifier;

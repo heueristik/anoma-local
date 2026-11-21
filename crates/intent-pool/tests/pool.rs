@@ -1,4 +1,5 @@
-use anoma_arm::digest::{Action, AppData};
+use anoma_arm::action::Action;
+use anoma_arm::app_data::AppData;
 use anoma_arm::{Fr, Point};
 use anoma_intent_pool::{IntentPool, MemoryIntentPool, PooledIntent};
 use anoma_prover::action::{LogicProof, ProvedAction};

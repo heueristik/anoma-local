@@ -45,3 +45,9 @@ pub fn scalar_limbs(scalar: Scalar) -> (Fr, Fr) {
 pub fn coordinates(point: Point) -> (Fr, Fr) {
     point.xy().unwrap_or_default()
 }
+
+/// The low 253 bits of a 32-byte hash, which are smaller than the BN254 scalar field modulus, as the contract keeps them.
+pub(crate) fn low_253_bits(mut hash: [u8; 32]) -> Fr {
+    hash[0] &= 0x1f;
+    Fr::from_be_bytes_mod_order(&hash)
+}

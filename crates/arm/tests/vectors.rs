@@ -1,11 +1,13 @@
 //! Values that the Noir library and the contract compute for the same inputs.
 
+use anoma_arm::action::action_tree_root;
+use anoma_arm::app_data::{AppData, Blob, DeletionCriterion};
 use anoma_arm::belt::{Belt, node_hash};
 use anoma_arm::delta::unit_delta;
-use anoma_arm::digest::{ActionInstance, AppData, Blob, DeletionCriterion, Deployment, extend};
+use anoma_arm::digest::{ActionInstance, Deployment, extend};
 use anoma_arm::field::{from_bytes, scalar_limbs, to_bytes, to_hex};
 use anoma_arm::hash::poseidon2_hash;
-use anoma_arm::resource::{NullifierKey, Resource, action_tree_root, created_nonce};
+use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
 use anoma_arm::{Fr, Point, Scalar};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::PrimeField;

@@ -5,7 +5,7 @@ mod payload;
 
 pub use payload::{Mismatch, Offer, Payload};
 
-use anoma_arm::digest::AppData;
+use anoma_arm::app_data::AppData;
 use anoma_arm::hash::{Domain, hash};
 use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
 use anoma_arm::{Fr, Scalar};

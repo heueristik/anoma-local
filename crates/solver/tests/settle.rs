@@ -7,8 +7,8 @@
 use std::path::PathBuf;
 
 use anoma_arm::Fr;
+use anoma_arm::action::Action;
 use anoma_arm::belt::{Belt, MembershipPath};
-use anoma_arm::digest::Action;
 use anoma_arm::resource::{NullifierKey, RESOURCE_BYTES, Resource};
 use anoma_discovery::{Discovery, EciesDiscovery, EciesSecretKeys};
 use anoma_integration_test::chain::Chain;

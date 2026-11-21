@@ -5,7 +5,7 @@
 pub mod ecies;
 pub mod encryption;
 
-use anoma_arm::digest::AppData;
+use anoma_arm::app_data::AppData;
 
 pub use ecies::{EciesAddress, EciesDiscovery, EciesSecretKeys};
 

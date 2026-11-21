@@ -1,6 +1,7 @@
 //! Partial transactions, which anyone can compose, and the final proof of a balanced transaction.
 
-use anoma_arm::digest::{Action, Deployment};
+use anoma_arm::action::Action;
+use anoma_arm::digest::Deployment;
 use anoma_arm::{Fr, Point, Scalar};
 use ark_ec::{AffineRepr, CurveGroup};
 

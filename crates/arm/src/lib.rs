@@ -1,6 +1,9 @@
 //! The resource machine of the Anoma local circuits, computed outside the circuits: the hashes, resources, kind bases,
-//! deltas, the commitment tree and the action digest, each equal to the Noir library and the contract.
+//! deltas, actions and their app data, the commitment tree and the action digest, each equal to the Noir library and
+//! the contract.
 
+pub mod action;
+pub mod app_data;
 pub mod belt;
 pub mod delta;
 pub mod digest;

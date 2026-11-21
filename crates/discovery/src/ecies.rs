@@ -1,6 +1,6 @@
 //! The discovery scheme of Anoma Galileo, with ECIES on secp256k1.
 
-use anoma_arm::digest::{AppData, Blob, DeletionCriterion};
+use anoma_arm::app_data::{AppData, Blob, DeletionCriterion};
 
 use crate::encryption::{self, Error, PublicKey, SecretKey};
 use crate::{Discovery, ReceiverAddress};

@@ -1,5 +1,6 @@
+use anoma_arm::action::Action;
+use anoma_arm::app_data::AppData;
 use anoma_arm::delta::unit_delta;
-use anoma_arm::digest::{Action, AppData};
 use anoma_arm::kind::Kind;
 use anoma_arm::resource::NullifierKey;
 use anoma_arm::{Fr, Scalar};

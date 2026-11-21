@@ -110,8 +110,3 @@ impl NullifierKey {
 pub fn created_nonce(nullifier: Fr) -> Fr {
     hash(Domain::Nonce, &[nullifier])
 }
-
-/// The root of the action tree of a compliance unit: the hash of its two tags.
-pub fn action_tree_root(nullifier: Fr, commitment: Fr) -> Fr {
-    hash(Domain::ActionTree, &[nullifier, commitment])
-}

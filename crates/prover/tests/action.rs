@@ -5,8 +5,8 @@
 mod common;
 
 use anoma_arm::Fr;
+use anoma_arm::action::action_tree_root;
 use anoma_arm::field::coordinates;
-use anoma_arm::resource::action_tree_root;
 use anoma_prover::Error;
 use anoma_prover::action::{Logic, ProvedAction, prove};
 use anoma_prover::circuit_prover::{CircuitError, CircuitProver};

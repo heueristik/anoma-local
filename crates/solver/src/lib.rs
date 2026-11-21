@@ -7,7 +7,7 @@ pub mod matching;
 
 use std::collections::BTreeSet;
 
-use anoma_arm::digest::AppData;
+use anoma_arm::app_data::AppData;
 use anoma_arm::resource::{NullifierKey, Resource};
 use anoma_arm::{Fr, Scalar};
 use anoma_discovery::Discovery;

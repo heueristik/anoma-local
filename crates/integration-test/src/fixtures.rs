@@ -3,8 +3,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+use anoma_arm::app_data::AppData;
 use anoma_arm::belt::{Belt, MembershipPath};
-use anoma_arm::digest::AppData;
 use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
 use anoma_arm::{Fr, Scalar};
 use anoma_discovery::{Discovery, EciesAddress, EciesDiscovery};

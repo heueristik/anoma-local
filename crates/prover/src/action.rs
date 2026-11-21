@@ -1,11 +1,12 @@
 //! The leaf proofs of one action: its compliance unit and the logics of its two resources.
 
+use anoma_arm::action::{Action, action_tree_root};
+use anoma_arm::app_data::AppData;
 use anoma_arm::belt::MembershipPath;
 use anoma_arm::delta::unit_delta;
-use anoma_arm::digest::{Action, AppData};
 use anoma_arm::field::{coordinates, to_hex};
 use anoma_arm::kind::Kind;
-use anoma_arm::resource::{NullifierKey, Resource, action_tree_root, created_nonce};
+use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
 use anoma_arm::{Fr, Point, Scalar};
 
 use crate::circuit_prover::{CircuitInputs, CircuitProver, Proof, Target, VerificationKey};
