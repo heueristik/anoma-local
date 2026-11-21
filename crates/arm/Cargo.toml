@@ -1,0 +1,19 @@
+[package]
+name = "anoma-arm"
+description = "The resource machine types and hashes of the Anoma local circuits, computed outside the circuits"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+
+[dependencies]
+acir_field = { workspace = true }
+ark-bn254 = { workspace = true }
+ark-ec = { workspace = true }
+ark-ff = { workspace = true }
+ark-grumpkin = { workspace = true }
+bn254_blackbox_solver = { workspace = true }
+hex = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }

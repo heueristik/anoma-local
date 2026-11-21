@@ -11,7 +11,7 @@ default:
 # --- All components ---
 
 # Run every check that CI runs
-all-check: contracts-check circuits-check
+all-check: contracts-check circuits-check crates-check
 
 # --- Contracts ---
 
@@ -102,3 +102,33 @@ circuits-keys-check: circuits-keys
 
 # Run every circuit check that CI runs
 circuits-check: circuits-fmt-check circuits-keys-check circuits-test
+
+# --- Crates ---
+
+# Build the crates
+crates-build *args:
+    cargo build --workspace --all-targets {{ args }}
+
+# Run the crate tests that need no prover
+crates-test *args:
+    cargo test --workspace {{ args }}
+
+# Run all crate tests, also those that prove transactions and execute them on anvil; one thread, since each proof uses all cores
+crates-test-slow *args: circuits-keys
+    NARGO={{ nargo }} BB={{ bb }} cargo test --workspace --all-features {{ args }} -- --test-threads 1
+
+# Lint the crates for both feature sets
+crates-lint:
+    cargo clippy --workspace --all-targets --no-deps -- -Dwarnings
+    cargo clippy --workspace --all-targets --all-features --no-deps -- -Dwarnings
+
+# Format the crates
+crates-fmt:
+    cargo fmt --all
+
+# Check the crate formatting
+crates-fmt-check:
+    cargo fmt --all -- --check
+
+# Run every crate check that CI runs
+crates-check: crates-fmt-check crates-build crates-lint crates-test

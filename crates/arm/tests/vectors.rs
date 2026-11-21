@@ -1,0 +1,153 @@
+//! Values that the Noir library and the contract compute for the same inputs.
+
+use anoma_arm::belt::{Belt, node_hash};
+use anoma_arm::delta::unit_delta;
+use anoma_arm::digest::{ActionInstance, AppData, Blob, DeletionCriterion, extend};
+use anoma_arm::field::{from_bytes, scalar_limbs, to_bytes, to_hex};
+use anoma_arm::hash::poseidon2_hash;
+use anoma_arm::resource::{NullifierKey, Resource, action_tree_root, created_nonce};
+use anoma_arm::{Fr, Point, Scalar};
+use ark_ec::{AffineRepr, CurveGroup};
+use ark_ff::PrimeField;
+
+fn fr(hex: &str) -> Fr {
+    let bytes: [u8; 32] = hex::decode(hex.trim_start_matches("0x"))
+        .expect("the vector is hexadecimal")
+        .try_into()
+        .expect("the vector has 32 bytes");
+    from_bytes(bytes).expect("the vector is a field element")
+}
+
+#[test]
+fn poseidon2_hash_matches_noir() {
+    assert_eq!(
+        poseidon2_hash(&[Fr::from(1000u64), Fr::from(2000u64)]),
+        fr("0x118d5a5ecb25dafe99eb45cb196604a23d0b7c0cbd0c2be29e0787e59b7a1d8a")
+    );
+}
+
+#[test]
+fn node_hash_matches_the_contract_and_noir() {
+    let expected = fr("0x2437d9514d36909ae8e6c80bb839bd22a8ad60d9b31d2ce92392151ec5d2aba9");
+    assert_eq!(node_hash(Fr::from(1u64), Fr::from(2u64)), expected);
+
+    let mut belt = Belt::default();
+    belt.append(&[Fr::from(1u64), Fr::from(2u64)]);
+    assert_eq!(belt.root(), expected);
+}
+
+#[test]
+fn commitment_and_nullifier_match_noir() {
+    let key = NullifierKey(Fr::from(42u64));
+    let resource = Resource {
+        logic_ref: Fr::from(1u64),
+        label_ref: Fr::from(2u64),
+        value_ref: Fr::from(3u64),
+        quantity: 4,
+        nonce: Fr::from(5u64),
+        nullifier_key_commitment: key.commitment(),
+        is_ephemeral: false,
+        rand_seed: Fr::from(6u64),
+    };
+
+    assert_eq!(
+        resource.commitment(),
+        fr("0x2a624eb9644481627292ed4246f710962085375bc1c415081812f39ab59075e2")
+    );
+    assert_eq!(
+        resource.nullifier(key),
+        Ok(fr(
+            "0x278a0152ca2158741a4f8e2f39c5554b737c6aab6ef2fe76e82b3cd492297e13"
+        ))
+    );
+    assert_eq!(
+        created_nonce(Fr::from(7u64)),
+        fr("0x08c1e2b6d8c28fbfe356dee9fca1e16a1dc8e059de5bb1fd80e30eb3d7517cff")
+    );
+    assert_eq!(
+        action_tree_root(Fr::from(1u64), Fr::from(2u64)),
+        fr("0x044c43b29cb65ade252b645f9d016e04f33e4a7f263d503e1ca1422b0f62aa04")
+    );
+}
+
+#[test]
+fn unit_delta_matches_noir() {
+    let kind = (Point::generator() + Point::generator()).into_affine();
+    let delta = unit_delta(kind, 10, kind, 7, Scalar::from(99u64));
+
+    assert_eq!(
+        delta.x,
+        fr("0x1ecb26016f6aef189bfd215d3cbd114f0f74edf07f296d5762702003482d9dac")
+    );
+    assert_eq!(
+        delta.y,
+        fr("0x065fab200eda11ff5267a0045eeb0a599c8ea1b5548c907f95c8df351c9964c9")
+    );
+}
+
+#[test]
+fn scalar_limbs_match_noir() {
+    // Noir's `EmbeddedCurveScalar::from_field(-1)`.
+    let minus_one = Scalar::from_be_bytes_mod_order(&to_bytes(-Fr::from(1u64)));
+    let (lo, hi) = scalar_limbs(minus_one);
+    assert_eq!(
+        to_hex(lo),
+        format!("0x{:0>64}", "2833e84879b9709143e1f593f0000000")
+    );
+    assert_eq!(
+        to_hex(hi),
+        format!("0x{:0>64}", "30644e72e131a029b85045b68181585d")
+    );
+}
+
+#[test]
+fn extend_matches_the_contract_and_noir() {
+    let empty = AppData::default().hash();
+    assert_eq!(
+        empty,
+        fr("0x174708fff7719dd5979ec875d56cd2286f6d3cf7ec317a3b25632aab28ec37bb")
+    );
+
+    let action = ActionInstance {
+        nullifier: Fr::from(1u64),
+        consumed_logic_ref: Fr::from(2u64),
+        consumed_app_data_hash: empty,
+        commitment: Fr::from(4u64),
+        created_logic_ref: Fr::from(5u64),
+        created_app_data_hash: empty,
+        commitment_tree_root: Fr::from(0u64),
+    };
+    assert_eq!(
+        extend(Fr::from(0u64), &action),
+        fr("0x10545fff186a4bd171fe33842768c98e12133b06c13ee14b99182ef580ef78bf")
+    );
+}
+
+#[test]
+fn app_data_hash_packs_each_blob_with_its_criterion_and_length() {
+    let app_data = AppData {
+        resource_payload: vec![Blob {
+            deletion_criterion: DeletionCriterion::Never,
+            bytes: b"ab".to_vec(),
+        }],
+        application_payload: vec![Blob {
+            deletion_criterion: DeletionCriterion::Immediately,
+            bytes: b"c".to_vec(),
+        }],
+        ..AppData::default()
+    };
+    let packed = [
+        &[0, 0, 0, 1, 1, 0, 0, 0, 2, b'a', b'b'][..],
+        &[0, 0, 0, 0],
+        &[0, 0, 0, 0],
+        &[0, 0, 0, 1, 0, 0, 0, 0, 1, b'c'],
+    ]
+    .concat();
+    let mut hash: [u8; 32] = <sha2::Sha256 as sha2::Digest>::digest(&packed).into();
+    hash[0] &= 0x1f;
+
+    assert_eq!(
+        app_data.hash(),
+        from_bytes(hash).expect("253 bits are a field element")
+    );
+}
