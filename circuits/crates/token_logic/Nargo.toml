@@ -1,0 +1,8 @@
+[package]
+name = "token_logic"
+type = "bin"
+authors = ["Heueristik"]
+compiler_version = ">=1.0.0"
+
+[dependencies]
+arm = { path = "../arm" }

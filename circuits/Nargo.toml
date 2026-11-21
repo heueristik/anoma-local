@@ -4,6 +4,7 @@ members = [
     "crates/compliance",
     "crates/trivial_logic",
     "crates/intent_logic",
+    "crates/token_logic",
     "crates/step",
     "crates/first_step",
     "crates/next_step",
