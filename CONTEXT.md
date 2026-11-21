@@ -12,6 +12,7 @@
 - **Label ref**: the hash of the label of a resource. The logic ref and the label ref together give the **kind**.
 - **Kind base**: a Grumpkin point, one for each kind, with no known discrete logarithm.
 - **Action**: one consumed and one created resource, with their app data and the commitment tree root of the membership path.
+- **Action tree root**: the hash of the tags of the consumed and the created resource of an action. Each logic proof of the action takes it as a public input.
 - **Delta**: the Grumpkin point of an action: the consumed quantity times its kind base, minus the created quantity times its kind base, plus the rcv times the generator.
 - **rcv**: the random scalar of an action that hides its quantities in the delta.
 
@@ -30,6 +31,11 @@
 - **Merkle Mountain Belt**: the commitment tree, a list of perfect binary trees under one Poseidon2 root.
 - **Membership path**: the hashes from a commitment to a root. The compliance circuit takes every path at the maximum length of 67 hashes, so the length does not show the age of the resource.
 - **Historical root**: a root that the contract had at some time, from the root of the empty tree on. A membership path must lead to one. The action of an ephemeral resource shows a recent one, so that its root does not show that the resource is ephemeral.
+
+## Tokens
+
+- **Token**: a resource of the token logic. Its label ref is the hash of the P-256 public key of its **issuer**, so each issuer has its own kind. Its value ref is the hash of the P-256 public key of its **owner**.
+- **Signer**: the P-256 key that signs the action tree root of an action that consumes a token of a quantity: the owner for a persistent token, and the issuer for an ephemeral token, whose consumption mints the quantity. A token of quantity 0 needs no signature. A token binds one key, not a KERI identifier: after a rotation of its key, the owner moves its tokens to the new key.
 
 ## Intents and solvers
 
