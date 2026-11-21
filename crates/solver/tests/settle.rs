@@ -61,12 +61,12 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
 
     // Each party proves the action that gives up its minted token for an intent, and submits it to the pool.
     let mut pool = IntentPool::default();
-    let mut propose = |index: usize, owner, want, min_quantity, receiver: &ReceiverKeys, seed| {
+    let mut propose = |index: usize, owner, want, want_quantity, receiver: &ReceiverKeys, seed| {
         let actions = fixtures::propose(
             mints[index].created,
             owner,
             belt.path(index)?,
-            fixtures::terms(want, min_quantity, owner, seed)?,
+            fixtures::terms(want, want_quantity, owner, seed)?,
             receiver.receiver(),
             &solver.keys.receiver(),
             seed,

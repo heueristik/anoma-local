@@ -166,6 +166,6 @@ fn order(payload: &Payload) -> Order {
             logic_ref: payload.terms.want_logic_ref,
             label_ref: payload.terms.want_label_ref,
         },
-        min_quantity: payload.terms.min_quantity,
+        want_quantity: payload.terms.want_quantity,
     }
 }

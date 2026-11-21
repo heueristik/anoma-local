@@ -6,7 +6,7 @@ pub struct Terms {
     pub want_logic_ref: Field,
     pub want_label_ref: Field,
     pub want_value_ref: Field,
-    pub min_quantity: u128,
+    pub want_quantity: u128,
     pub receiver_nullifier_key_commitment: Field,
     pub want_rand_seed: Field,
 }
@@ -18,7 +18,7 @@ impl Terms {
                 self.want_logic_ref,
                 self.want_label_ref,
                 self.want_value_ref,
-                self.min_quantity as Field,
+                self.want_quantity as Field,
                 self.receiver_nullifier_key_commitment,
                 self.want_rand_seed,
             ],
@@ -70,7 +70,7 @@ fn check_consumed(
     assert(created.label_ref == terms.want_label_ref, "the created resource has another label");
     assert(created.value_ref == terms.want_value_ref, "the created resource has another value");
     assert(
-        created.quantity == terms.min_quantity,
+        created.quantity == terms.want_quantity,
         "the created quantity is not the quantity of the terms",
     );
     assert(
@@ -93,7 +93,7 @@ fn check_consumed_accepts_the_created_resource_of_the_terms() {
 #[test(should_fail_with = "the created quantity is not the quantity of the terms")]
 fn check_consumed_fails_on_a_quantity_above_the_terms() {
     let (intent, terms, mut created) = filled();
-    created.quantity = terms.min_quantity + 1;
+    created.quantity = terms.want_quantity + 1;
     check(intent, terms, created);
 }
 
@@ -121,8 +121,8 @@ fn check_consumed_fails_on_another_random_seed() {
 #[test(should_fail_with = "the label of the intent is not the hash of its terms")]
 fn check_consumed_fails_on_terms_that_are_not_the_label() {
     let (intent, mut terms, mut created) = filled();
-    terms.min_quantity -= 1;
-    created.quantity = terms.min_quantity;
+    terms.want_quantity -= 1;
+    created.quantity = terms.want_quantity;
     check(intent, terms, created);
 }
 
@@ -162,7 +162,7 @@ fn filled() -> (Resource, Terms, Resource) {
         want_logic_ref: 7,
         want_label_ref: 8,
         want_value_ref: 10,
-        min_quantity: 4,
+        want_quantity: 4,
         receiver_nullifier_key_commitment: 9,
         want_rand_seed: 5,
     };
@@ -180,7 +180,7 @@ fn filled() -> (Resource, Terms, Resource) {
         logic_ref: terms.want_logic_ref,
         label_ref: terms.want_label_ref,
         value_ref: terms.want_value_ref,
-        quantity: terms.min_quantity,
+        quantity: terms.want_quantity,
         nonce: 4,
         nullifier_key_commitment: terms.receiver_nullifier_key_commitment,
         is_ephemeral: false,

@@ -120,7 +120,7 @@ fn prove_errors_on_a_fill_with_another_quantity_than_the_terms() -> anyhow::Resu
 /// An intent of a party: what it wants, and the nullifier key that it gives to the solver.
 struct Intent {
     want_label: u64,
-    min_quantity: u128,
+    want_quantity: u128,
     receiver: NullifierKey,
     /// Makes the nullifier key of the intent and the random seed of its fill.
     seed: u64,
@@ -134,10 +134,10 @@ struct Part {
 }
 
 impl Intent {
-    fn new(want_label: u64, min_quantity: u128, receiver: NullifierKey, seed: u64) -> Self {
+    fn new(want_label: u64, want_quantity: u128, receiver: NullifierKey, seed: u64) -> Self {
         Self {
             want_label,
-            min_quantity,
+            want_quantity,
             receiver,
             seed,
             nullifier_key: NullifierKey(Fr::from(seed)),
@@ -145,7 +145,12 @@ impl Intent {
     }
 
     fn terms(&self) -> anyhow::Result<Terms> {
-        fixtures::terms(self.want_label, self.min_quantity, self.receiver, self.seed)
+        fixtures::terms(
+            self.want_label,
+            self.want_quantity,
+            self.receiver,
+            self.seed,
+        )
     }
 
     /// Proves the action that consumes the token at `index` of the belt and creates this intent.

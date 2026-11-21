@@ -13,12 +13,12 @@ const APPLE: u64 = 1;
 const BANANA: u64 = 2;
 const CHERRY: u64 = 3;
 
-fn order(give: u64, give_quantity: u128, want: u64, min_quantity: u128) -> Order {
+fn order(give: u64, give_quantity: u128, want: u64, want_quantity: u128) -> Order {
     Order {
         give: kind(give),
         give_quantity,
         want: kind(want),
-        min_quantity,
+        want_quantity,
     }
 }
 
@@ -56,7 +56,7 @@ fn solve_fills_a_ring_of_three_orders_of_which_no_two_balance() -> anyhow::Resul
 }
 
 #[test]
-fn solve_leaves_an_order_whose_minimum_no_other_order_gives() -> anyhow::Result<()> {
+fn solve_leaves_an_order_whose_wanted_quantity_no_other_order_gives() -> anyhow::Result<()> {
     let orders = [
         order(APPLE, 4, BANANA, 4),
         order(BANANA, 7, APPLE, 3),

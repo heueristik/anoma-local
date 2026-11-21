@@ -24,7 +24,7 @@ pub struct Terms {
     pub want_logic_ref: Fr,
     pub want_label_ref: Fr,
     pub want_value_ref: Fr,
-    pub min_quantity: u128,
+    pub want_quantity: u128,
     pub receiver_nullifier_key_commitment: Fr,
     pub want_rand_seed: Fr,
 }
@@ -36,7 +36,7 @@ impl Terms {
             self.want_logic_ref,
             self.want_label_ref,
             self.want_value_ref,
-            Fr::from(self.min_quantity),
+            Fr::from(self.want_quantity),
             self.receiver_nullifier_key_commitment,
             self.want_rand_seed,
         ])
@@ -48,7 +48,7 @@ impl Terms {
             logic_ref: self.want_logic_ref,
             label_ref: self.want_label_ref,
             value_ref: self.want_value_ref,
-            quantity: self.min_quantity,
+            quantity: self.want_quantity,
             nonce: created_nonce(intent_nullifier),
             nullifier_key_commitment: self.receiver_nullifier_key_commitment,
             is_ephemeral: false,
@@ -115,7 +115,7 @@ pub fn created_logic() -> Result<Logic, Error> {
         want_logic_ref: Fr::from(0u64),
         want_label_ref: Fr::from(0u64),
         want_value_ref: Fr::from(0u64),
-        min_quantity: 0,
+        want_quantity: 0,
         receiver_nullifier_key_commitment: Fr::from(0u64),
         want_rand_seed: Fr::from(0u64),
     };
@@ -137,7 +137,7 @@ pub fn consumed_logic(
             want_logic_ref: Field(terms.want_logic_ref),
             want_label_ref: Field(terms.want_label_ref),
             want_value_ref: Field(terms.want_value_ref),
-            min_quantity: Quantity(terms.min_quantity),
+            want_quantity: Quantity(terms.want_quantity),
             receiver_nullifier_key_commitment: Field(terms.receiver_nullifier_key_commitment),
             want_rand_seed: Field(terms.want_rand_seed),
         },
@@ -166,7 +166,7 @@ struct TermsInput {
     want_logic_ref: Field,
     want_label_ref: Field,
     want_value_ref: Field,
-    min_quantity: Quantity,
+    want_quantity: Quantity,
     receiver_nullifier_key_commitment: Field,
     want_rand_seed: Field,
 }

@@ -1,5 +1,5 @@
 //! The choice of the intents to fill, as an integer program for CP-SAT: one Boolean for each intent, and for each kind
-//! the constraint that the filled intents give at least the minimums that they want.
+//! the constraint that the filled intents give at least the quantities that they want.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -20,10 +20,10 @@ pub struct Order {
     pub give: KindRef,
     pub give_quantity: u128,
     pub want: KindRef,
-    pub min_quantity: u128,
+    pub want_quantity: u128,
 }
 
-/// The orders to fill, by index, and what is left of each kind after each filled order gets its minimum.
+/// The orders to fill, by index, and what is left of each kind after each filled order gets the quantity that it wants.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Matching {
     pub chosen: Vec<usize>,
@@ -39,7 +39,8 @@ pub enum Error {
     Status(CpSolverStatus),
 }
 
-/// The most orders that balance together, if each filled order gets its minimum and the solver keeps the surplus.
+/// The most orders that balance together, if each filled order gets the quantity that it wants and the solver keeps
+/// the surplus.
 pub fn solve(orders: &[Order]) -> Result<Matching, Error> {
     let quantities = orders
         .iter()
@@ -49,7 +50,7 @@ pub fn solve(orders: &[Order]) -> Result<Matching, Error> {
                 |value: u128| i64::try_from(value).map_err(|_| Error::QuantityTooLarge { index });
             Ok((
                 quantity(order.give_quantity)?,
-                quantity(order.min_quantity)?,
+                quantity(order.want_quantity)?,
             ))
         })
         .collect::<Result<Vec<_>, Error>>()?;
@@ -95,7 +96,7 @@ pub fn solve(orders: &[Order]) -> Result<Matching, Error> {
         *balances.entry(orders[index].give).or_default() += orders[index].give_quantity;
     }
     for &index in &chosen {
-        *balances.entry(orders[index].want).or_default() -= orders[index].min_quantity;
+        *balances.entry(orders[index].want).or_default() -= orders[index].want_quantity;
     }
     balances.retain(|_, surplus| *surplus > 0);
     Ok(Matching {

@@ -59,7 +59,7 @@ impl Payload {
         ] {
             bytes.extend_from_slice(&to_bytes(field));
         }
-        bytes.extend_from_slice(&self.terms.min_quantity.to_be_bytes());
+        bytes.extend_from_slice(&self.terms.want_quantity.to_be_bytes());
         for field in [self.offer.logic_ref, self.offer.label_ref] {
             bytes.extend_from_slice(&to_bytes(field));
         }
@@ -81,7 +81,7 @@ impl Payload {
         let want_value_ref = reader.field()?;
         let receiver_nullifier_key_commitment = reader.field()?;
         let want_rand_seed = reader.field()?;
-        let min_quantity = u128::from_be_bytes(reader.take()?);
+        let want_quantity = u128::from_be_bytes(reader.take()?);
         let offer = Offer {
             logic_ref: reader.field()?,
             label_ref: reader.field()?,
@@ -100,7 +100,7 @@ impl Payload {
                 want_logic_ref,
                 want_label_ref,
                 want_value_ref,
-                min_quantity,
+                want_quantity,
                 receiver_nullifier_key_commitment,
                 want_rand_seed,
             },
