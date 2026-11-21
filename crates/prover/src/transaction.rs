@@ -128,24 +128,11 @@ pub fn prove(
 /// One party makes the setup and knows its secret, so it can make false proofs: the keys are for tests only.
 pub fn single_party_wrap_keys(toolchain: &Toolchain, directory: &Path) -> Result<Keys, Error> {
     let root = toolchain.verification_key(ROOT)?;
-    let name = to_hex(root.hash);
-    let keys = directory.join(&name);
-    if !keys.exists() {
-        // The setup writes to another directory first, so that a stopped setup leaves no keys.
-        let partial = directory.join(format!("{name}.partial"));
-        if partial.exists() {
-            std::fs::remove_dir_all(&partial).map_err(|source| Error::Io {
-                path: partial.clone(),
-                source,
-            })?;
-        }
-        single_party_setup(&to_field_bytes(&root.fields), &partial)?;
-        std::fs::rename(&partial, &keys).map_err(|source| Error::Io {
-            path: partial,
-            source,
-        })?;
+    let keys = directory.join(to_hex(root.hash));
+    if keys.exists() {
+        return Ok(Keys::new(keys));
     }
-    Ok(Keys::new(keys))
+    Ok(single_party_setup(&to_field_bytes(&root.fields), &keys)?)
 }
 
 fn action_proofs(proved: &ProvedAction) -> inputs::ActionProofs {

@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::string::FromUtf8Error;
 
 /// An error of the wrap.
@@ -15,6 +16,12 @@ pub enum Error {
     /// The Go library returned public inputs whose length is not a multiple of 32 bytes.
     #[error("the wrap returned {0} bytes of public inputs, which is not a multiple of 32")]
     PublicInputsLength(usize),
+    /// The setup cannot remove, write or rename a key folder.
+    #[error("cannot set up the keys in {path}: {source}")]
+    Io {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     /// The Go library returned a Solidity verifier that is not UTF-8.
     #[error("the Solidity verifier is not UTF-8: {0}")]
     SolidityVerifierEncoding(#[from] FromUtf8Error),

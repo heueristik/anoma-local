@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// A directory with the keys of the wrapper circuit for one inner verifying key, as `single_party_setup` writes it.
 ///
@@ -14,10 +14,6 @@ impl Keys {
         Self {
             directory: directory.into(),
         }
-    }
-
-    pub fn directory(&self) -> &Path {
-        &self.directory
     }
 
     pub(crate) fn encoded_directory(&self) -> &[u8] {

@@ -6,7 +6,7 @@ mod ffi;
 mod keys;
 mod proof;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub use error::Error;
 pub use keys::Keys;
@@ -15,13 +15,26 @@ pub use proof::Groth16Proof;
 /// The length of one encoded field element: 32 bytes, big-endian.
 pub const FIELD_BYTES: usize = 32;
 
-/// Compiles the wrapper circuit for an inner verifying key, as bb writes it, and writes its keys to `directory`.
+/// Compiles the wrapper circuit for an inner verifying key, as bb writes it, and writes its keys to `directory`, which
+/// must not exist. The keys go to a `.partial` folder first, so that a stopped setup leaves no `directory`.
 ///
 /// The caller knows the setup secret and can make false proofs, so the keys are for tests only.
 pub fn single_party_setup(inner_verifying_key: &[u8], directory: &Path) -> Result<Keys, Error> {
-    let keys = Keys::new(directory);
-    ffi::single_party_setup(inner_verifying_key, keys.encoded_directory())?;
-    Ok(keys)
+    let mut partial = directory.as_os_str().to_owned();
+    partial.push(".partial");
+    let partial = PathBuf::from(partial);
+    if partial.exists() {
+        std::fs::remove_dir_all(&partial).map_err(|source| Error::Io {
+            path: partial.clone(),
+            source,
+        })?;
+    }
+    ffi::single_party_setup(inner_verifying_key, Keys::new(&partial).encoded_directory())?;
+    std::fs::rename(&partial, directory).map_err(|source| Error::Io {
+        path: directory.to_path_buf(),
+        source,
+    })?;
+    Ok(Keys::new(directory))
 }
 
 /// Wraps an inner proof and its user public inputs, as bb writes them, into a Groth16 proof.
