@@ -74,7 +74,7 @@ bindings-check: contracts-gen-bindings
     git diff --exit-code -- crates/bindings/src/generated/
 
 # Run every contract check that CI runs
-contracts-check: contracts-fmt-check contracts-lint contracts-static-analysis contracts-clean contracts-build contracts-test
+contracts-check: contracts-fmt-check contracts-lint contracts-static-analysis contracts-test
 
 # --- Circuits ---
 
