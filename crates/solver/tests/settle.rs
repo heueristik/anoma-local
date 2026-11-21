@@ -12,8 +12,7 @@ use anoma_arm::digest::Action;
 use anoma_arm::resource::{NullifierKey, RESOURCE_BYTES, Resource};
 use anoma_discovery::ReceiverKeys;
 use anoma_integration_test::chain::Chain;
-use anoma_integration_test::fixtures::{self, token, token_logic_ref};
-use anoma_intent::Terms;
+use anoma_integration_test::fixtures::{self, token};
 use anoma_intent_pool::IntentPool;
 use anoma_prover::action::{self, Logic};
 use anoma_prover::transaction;
@@ -67,7 +66,7 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
             mints[index].created,
             owner,
             belt.path(index)?,
-            terms(want, min_quantity, owner)?,
+            fixtures::terms(want, min_quantity, owner)?,
             receiver.receiver(),
             &solver.keys.receiver(),
             seed,
@@ -106,15 +105,6 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
     );
     assert_eq!(received(&settlement.actions, &carol_keys), []);
     Ok(())
-}
-
-fn terms(want: u64, min_quantity: u128, receiver: NullifierKey) -> anyhow::Result<Terms> {
-    Ok(Terms {
-        want_logic_ref: token_logic_ref()?,
-        want_label_ref: Fr::from(want),
-        min_quantity,
-        receiver_nullifier_key_commitment: receiver.commitment(),
-    })
 }
 
 /// The label, quantity and owner of each created resource whose plaintext the keys decrypt, sorted.

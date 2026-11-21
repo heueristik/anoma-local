@@ -71,6 +71,16 @@ pub fn token(
     })
 }
 
+/// The terms of an intent that wants at least `min_quantity` tokens of the kind `want_label` for `receiver`.
+pub fn terms(want_label: u64, min_quantity: u128, receiver: NullifierKey) -> anyhow::Result<Terms> {
+    Ok(Terms {
+        want_logic_ref: token_logic_ref()?,
+        want_label_ref: Fr::from(want_label),
+        min_quantity,
+        receiver_nullifier_key_commitment: receiver.commitment(),
+    })
+}
+
 /// An action that consumes `consumed` and creates `created` with the nonce that the nullifier of `consumed` gives.
 /// `path` is the membership path of a persistent `consumed`.
 pub fn action(

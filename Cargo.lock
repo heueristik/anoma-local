@@ -1078,10 +1078,10 @@ version = "0.1.0"
 dependencies = [
  "anoma-arm",
  "anoma-groth16-wrap",
+ "anoma-integration-test",
  "anyhow",
  "ark-ec",
  "serde",
- "tempfile",
  "thiserror",
  "toml",
 ]

@@ -12,9 +12,7 @@ use anoma_arm::belt::Belt;
 use anoma_arm::resource::{NullifierKey, Resource};
 use anoma_bindings::conversion::word;
 use anoma_integration_test::chain::Chain;
-use anoma_integration_test::fixtures::{
-    self, action as build_action, intent_logic_ref, token, token_logic_ref,
-};
+use anoma_integration_test::fixtures::{self, action as build_action, intent_logic_ref, token};
 use anoma_intent::Terms;
 use anoma_prover::action::{ActionWitness, Logic};
 use anoma_prover::{Error, PartialTransaction, Transaction, action, transaction};
@@ -132,12 +130,7 @@ impl Intent {
     }
 
     fn terms(&self) -> anyhow::Result<Terms> {
-        Ok(Terms {
-            want_logic_ref: token_logic_ref()?,
-            want_label_ref: Fr::from(self.want_label),
-            min_quantity: self.min_quantity,
-            receiver_nullifier_key_commitment: self.receiver.commitment(),
-        })
+        fixtures::terms(self.want_label, self.min_quantity, self.receiver)
     }
 
     /// Proves the action that consumes the token at `index` of the belt and creates this intent.
