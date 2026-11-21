@@ -12,6 +12,7 @@ homepage = "https://anoma.net/"
 [workspace.dependencies]
 acir_field = "1.0.0"
 aes-gcm = "0.10.3"
+alloy = { version = "2.6.1", features = ["full", "node-bindings"] }
 anoma-arm = { path = "crates/arm" }
 anoma-discovery = { path = "crates/discovery" }
 anoma-groth16-wrap = { path = "crates/groth16-wrap" }

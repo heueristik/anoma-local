@@ -55,6 +55,17 @@ contracts-fmt *args:
 contracts-fmt-check:
     cd contracts && forge fmt --check
 
+# Regenerate the Rust bindings of the contracts
+contracts-gen-bindings:
+    # `forge bind` builds without bytecode, so it reads the artifacts of this build.
+    cd contracts && forge clean && forge build src/AnomaVerifier.sol src/interfaces/IAnomaVerifier.sol \
+        && forge bind --skip-build --select '^(AnomaVerifier|IAnomaVerifier)$' \
+        --bindings-path ../crates/bindings/src/generated/ --module --overwrite
+
+# Check that the Rust bindings match the contracts
+bindings-check: contracts-gen-bindings
+    git diff --exit-code -- crates/bindings/src/generated/
+
 # Run every contract check that CI runs
 contracts-check: contracts-fmt-check contracts-lint contracts-static-analysis contracts-clean contracts-build contracts-test
 

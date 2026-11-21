@@ -1,0 +1,13 @@
+[package]
+name = "anoma-bindings"
+description = "The Rust bindings of the AnomaVerifier contract, and the conversions of the resource machine types to its types"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+
+[dependencies]
+alloy = { workspace = true }
+anoma-arm = { workspace = true }
+serde = { workspace = true }
