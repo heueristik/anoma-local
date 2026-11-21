@@ -1,0 +1,60 @@
+name: Crates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Each job states the permissions that it needs.
+permissions: {}
+
+# A new push to a pull request cancels the run of the previous push.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  tests:
+    name: Crates Tests
+    runs-on: macos-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Install Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: crates/groth16-wrap/go/go.mod
+          cache-dependency-path: crates/groth16-wrap/go/go.sum
+
+      - name: Install OR-Tools
+        run: just crates-tooling
+
+      - name: Check the crate formatting
+        run: just crates-fmt-check
+
+      - name: Build the crates
+        run: just crates-build
+
+      - name: Lint the crates
+        run: just crates-lint
+
+      # The tests that prove transactions need more memory than the runner has, so CI runs only the other tests.
+      - name: Run the crate tests
+        run: just crates-test

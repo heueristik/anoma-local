@@ -72,3 +72,6 @@ jobs:
 
       - name: Run Forge tests
         run: just contracts-test
+
+      - name: Check the Rust bindings
+        run: just bindings-check

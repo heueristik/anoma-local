@@ -1,0 +1,50 @@
+name: Circuits
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Each job states the permissions that it needs.
+permissions: {}
+
+# A new push to a pull request cancels the run of the previous push.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  tests:
+    name: Circuits Tests
+    runs-on: macos-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Install Noir
+        uses: noir-lang/noirup@v0.1.4
+        with:
+          toolchain: 1.0.0
+
+      - name: Install bb
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/AztecProtocol/aztec-packages/v6.0.0/barretenberg/bbup/install | bash
+          "$HOME/.bb/bbup" --version 6.0.0
+          echo "$HOME/.bb" >> "$GITHUB_PATH"
+
+      - name: Show the Noir and bb versions
+        run: nargo --version && bb --version
+
+      - name: Run the circuit checks
+        run: just circuits-check
