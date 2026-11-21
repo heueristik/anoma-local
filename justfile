@@ -105,6 +105,7 @@ circuits-keys: circuits-build
         echo "pub global FIRST_STEP_KEY_HASH: Field = $(key_hash first_step);"
         echo "pub global NEXT_STEP_KEY_HASH: Field = $(key_hash next_step);"
     } > crates/root/src/keys.nr
+    {{ nargo }} fmt
     {{ nargo }} compile --package root
 
 # Check that the key hashes of the root circuit match the other circuits
