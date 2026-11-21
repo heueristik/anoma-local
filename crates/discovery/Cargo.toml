@@ -1,6 +1,6 @@
 [package]
 name = "anoma-discovery"
-description = "The discovery of resources as in Anoma Galileo: ECIES encryption of resource and discovery payloads, and trial decryption"
+description = "The discovery of resources: ECIES on Grumpkin with Poseidon2 for resource and discovery payloads of field elements, and trial decryption"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
@@ -8,13 +8,10 @@ license = { workspace = true }
 homepage = { workspace = true }
 
 [dependencies]
-aes-gcm = { workspace = true }
 anoma-arm = { workspace = true }
-bincode = { workspace = true }
-k256 = { workspace = true }
+ark-ec = { workspace = true }
+ark-ff = { workspace = true }
 rand_core = { workspace = true }
-serde = { workspace = true }
-thiserror = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

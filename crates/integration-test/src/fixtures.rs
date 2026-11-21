@@ -7,7 +7,7 @@ use anoma_arm::app_data::AppData;
 use anoma_arm::belt::{Belt, MembershipPath};
 use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
 use anoma_arm::{Fr, Scalar};
-use anoma_discovery::{Discovery, EciesAddress, EciesDiscovery};
+use anoma_discovery::{Discovery, GrumpkinAddress, GrumpkinDiscovery};
 use anoma_groth16_wrap::Groth16Wrapper;
 use anoma_intent::{IntentLogic, Offer, Payload, Terms};
 use anoma_prover::action::{self, ActionWitness, Membership, ProvedAction};
@@ -175,8 +175,8 @@ pub fn propose(
     owner: &Party,
     path: MembershipPath,
     terms: Terms,
-    receiver: EciesAddress,
-    solver: &EciesAddress,
+    receiver: GrumpkinAddress,
+    solver: &GrumpkinAddress,
     seed: u64,
 ) -> anyhow::Result<Vec<ProvedAction>> {
     let payload = Payload {
@@ -201,6 +201,6 @@ pub fn propose(
         Arc::new(IntentLogic { terms }),
         seed,
     )?;
-    witness.created_app_data = EciesDiscovery.app_data(solver, &payload.to_bytes())?;
+    witness.created_app_data = GrumpkinDiscovery.app_data(solver, &payload.to_fields())?;
     Ok(action::prove(circuit_prover(), &witness)?.actions)
 }

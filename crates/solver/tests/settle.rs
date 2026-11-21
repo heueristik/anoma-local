@@ -10,8 +10,8 @@ use std::sync::Arc;
 use anoma_arm::Fr;
 use anoma_arm::action::Action;
 use anoma_arm::belt::{Belt, MembershipPath};
-use anoma_arm::resource::{RESOURCE_BYTES, Resource};
-use anoma_discovery::{Discovery, EciesDiscovery, EciesSecretKeys};
+use anoma_arm::resource::{RESOURCE_FIELDS, Resource};
+use anoma_discovery::{Discovery, GrumpkinDiscovery, GrumpkinSecretKeys};
 use anoma_integration_test::chain::Chain;
 use anoma_integration_test::fixtures::{self, Party, token};
 use anoma_intent_pool::{IntentPool, MemoryIntentId, MemoryIntentPool, PooledIntent};
@@ -33,7 +33,7 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
     let chain = Chain::deploy(&wrapper.keys, work.path()).await?;
     let [alice, bob, carol, sally] = [1u64, 2, 3, 4].map(Party::new);
     let [apple, banana, cherry] = issuers();
-    let [alice_keys, bob_keys, carol_keys] = std::array::from_fn(|_| EciesSecretKeys::random());
+    let [alice_keys, bob_keys, carol_keys] = std::array::from_fn(|_| GrumpkinSecretKeys::random());
     let solver = solver(&sally);
 
     let mints = [
@@ -154,7 +154,7 @@ fn solve_fills_a_copied_intent_once() -> anyhow::Result<()> {
         belt.path(0)?,
         &alice,
         (&banana, wanted_bananas),
-        &EciesSecretKeys::random(),
+        &GrumpkinSecretKeys::random(),
         &solver,
         101,
     )?;
@@ -163,7 +163,7 @@ fn solve_fills_a_copied_intent_once() -> anyhow::Result<()> {
         belt.path(1)?,
         &bob,
         (&apple, wanted_apples),
-        &EciesSecretKeys::random(),
+        &GrumpkinSecretKeys::random(),
         &solver,
         102,
     )?;
@@ -203,7 +203,7 @@ fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
         belt.path(0)?,
         &alice,
         (&banana, alice_wants),
-        &EciesSecretKeys::random(),
+        &GrumpkinSecretKeys::random(),
         &solver,
         101,
     )?;
@@ -212,7 +212,7 @@ fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
         belt.path(1)?,
         &bob,
         (&apple, bob_wants),
-        &EciesSecretKeys::random(),
+        &GrumpkinSecretKeys::random(),
         &solver,
         102,
     )?;
@@ -221,7 +221,7 @@ fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
         belt.path(2)?,
         &dave,
         (&banana, dave_wants),
-        &EciesSecretKeys::random(),
+        &GrumpkinSecretKeys::random(),
         &solver,
         105,
     )?;
@@ -268,7 +268,7 @@ fn solve_skips_an_intent_whose_payload_is_for_another_solver() -> anyhow::Result
                 belt.path(0)?,
                 &alice,
                 (&banana, alice_wants),
-                &EciesSecretKeys::random(),
+                &GrumpkinSecretKeys::random(),
                 &solver,
                 101,
             )?,
@@ -280,7 +280,7 @@ fn solve_skips_an_intent_whose_payload_is_for_another_solver() -> anyhow::Result
                 belt.path(1)?,
                 &bob,
                 (&apple, bob_wants),
-                &EciesSecretKeys::random(),
+                &GrumpkinSecretKeys::random(),
                 &solver,
                 102,
             )?,
@@ -292,7 +292,7 @@ fn solve_skips_an_intent_whose_payload_is_for_another_solver() -> anyhow::Result
                 belt.path(2)?,
                 &dave,
                 (&banana, dave_wants),
-                &EciesSecretKeys::random(),
+                &GrumpkinSecretKeys::random(),
                 &other_solver,
                 105,
             )?,
@@ -331,10 +331,10 @@ fn issuers() -> [Party; 3] {
 }
 
 /// A solver that trades tokens of the token logic and keeps its surplus for `owner`.
-fn solver(owner: &Party) -> Solver<EciesDiscovery, CpSatMatcher> {
+fn solver(owner: &Party) -> Solver<GrumpkinDiscovery, CpSatMatcher> {
     Solver {
-        discovery: EciesDiscovery,
-        secret_keys: EciesSecretKeys::random(),
+        discovery: GrumpkinDiscovery,
+        secret_keys: GrumpkinSecretKeys::random(),
         matcher: CpSatMatcher,
         owner: owner.nullifier_key,
         owner_value_ref: owner.key_hash(),
@@ -361,8 +361,8 @@ fn propose(
     path: MembershipPath,
     owner: &Party,
     (want_issuer, want_quantity): (&Party, u128),
-    receiver: &EciesSecretKeys,
-    solver: &Solver<EciesDiscovery, CpSatMatcher>,
+    receiver: &GrumpkinSecretKeys,
+    solver: &Solver<GrumpkinDiscovery, CpSatMatcher>,
     seed: u64,
 ) -> anyhow::Result<Vec<ProvedAction>> {
     fixtures::propose(
@@ -387,16 +387,18 @@ fn received_token(issuer: &Party, quantity: u128, owner: &Party) -> (Fr, u128, F
 
 /// The label ref, quantity and nullifier key commitment of each created resource whose plaintext the keys decrypt,
 /// sorted.
-fn received(actions: &[Action], keys: &EciesSecretKeys) -> Vec<(Fr, u128, Fr)> {
+fn received(actions: &[Action], keys: &GrumpkinSecretKeys) -> Vec<(Fr, u128, Fr)> {
     let mut received: Vec<(Fr, u128, Fr)> = actions
         .iter()
         .filter_map(|action| {
-            EciesDiscovery
+            GrumpkinDiscovery
                 .discover(&action.created_app_data, keys)?
                 .iter()
-                .filter_map(|bytes| {
-                    Resource::from_bytes(<&[u8; RESOURCE_BYTES]>::try_from(bytes.as_slice()).ok()?)
-                        .ok()
+                .filter_map(|fields| {
+                    Resource::from_fields(
+                        <&[Fr; RESOURCE_FIELDS]>::try_from(fields.as_slice()).ok()?,
+                    )
+                    .ok()
                 })
                 .find(|resource| resource.commitment() == action.commitment)
         })

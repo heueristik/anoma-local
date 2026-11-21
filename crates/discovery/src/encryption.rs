@@ -1,122 +1,137 @@
-//! ECIES on secp256k1, as Anoma Galileo encrypts payloads: the AES key is the SHA-256 hash of the receiver's public
-//! key and the shared point, and AES-256-GCM encrypts the message.
+//! ECIES on Grumpkin with Poseidon2, over BN254 field elements, which a BN254 circuit computes natively. The key is the
+//! hash of the shared point, a keystream of hashes of the key masks the message, and a hash of the key and the message
+//! is the tag. The scalar multiplication of arkworks does not take constant time, so a party that measures the time of
+//! many decryptions can learn bits of the secret key.
 
-use aes_gcm::aead::Aead;
-use aes_gcm::{AeadCore, Aes256Gcm, KeyInit};
-use k256::elliptic_curve::sec1::ToEncodedPoint;
-use k256::sha2::{Digest, Sha256};
-use k256::{AffinePoint, ProjectivePoint};
+use anoma_arm::field::{coordinates, from_bytes, point_from_coordinates, to_bytes};
+use anoma_arm::hash::{Domain, hash};
+use anoma_arm::{Fr, Point, Scalar};
+use ark_ec::{AffineRepr, CurveGroup};
+use ark_ff::{AdditiveGroup, UniformRand};
 use rand_core::OsRng;
-use serde::{Deserialize, Serialize};
 
-/// The errors of encryption and decryption.
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("the ciphertext is not a bincode envelope: {0}")]
-    Envelope(#[from] bincode::Error),
-    #[error("AES-GCM cannot encrypt a message of {0} bytes")]
-    Encryption(usize),
-    #[error("the key does not decrypt the ciphertext")]
-    Decryption,
-    #[error("the shared point is the point at infinity")]
-    SharedPoint,
-}
+/// A Grumpkin public key, which is never the point at infinity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PublicKey(Point);
 
-/// A secp256k1 secret key, with its public key, which each trial decryption hashes.
+/// A nonzero Grumpkin secret key, with its public key.
 #[derive(Clone, PartialEq, Eq)]
 pub struct SecretKey {
-    key: k256::SecretKey,
+    scalar: Scalar,
     public_key: PublicKey,
 }
 
-/// A secp256k1 public key.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PublicKey(AffinePoint);
+/// A message encrypted to a receiver: the public key of the sender's ephemeral key, the tag, and each field element of
+/// the message, masked.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Ciphertext {
+    pub ephemeral_key: PublicKey,
+    pub tag: Fr,
+    pub masked: Vec<Fr>,
+}
+
+/// Encrypts a message to a receiver with the sender's ephemeral key, which the sender uses for one message only.
+pub fn encrypt(message: &[Fr], receiver: &PublicKey, ephemeral_key: &SecretKey) -> Ciphertext {
+    let key = shared_key(receiver, ephemeral_key);
+    Ciphertext {
+        ephemeral_key: ephemeral_key.public_key,
+        tag: tag(key, message),
+        masked: message
+            .iter()
+            .zip(keystream(key))
+            .map(|(&field, mask)| field + mask)
+            .collect(),
+    }
+}
+
+/// The message of the ciphertext, if the tag shows that it is for the receiver's secret key.
+pub fn decrypt(ciphertext: &Ciphertext, receiver: &SecretKey) -> Option<Vec<Fr>> {
+    let key = shared_key(&ciphertext.ephemeral_key, receiver);
+    let message: Vec<Fr> = ciphertext
+        .masked
+        .iter()
+        .zip(keystream(key))
+        .map(|(&masked, mask)| masked - mask)
+        .collect();
+    (tag(key, &message) == ciphertext.tag).then_some(message)
+}
 
 impl SecretKey {
     pub fn random() -> Self {
-        Self::new(k256::SecretKey::random(&mut OsRng))
-    }
-
-    /// The secret key of 32 big-endian bytes, if they are a nonzero scalar below the group order.
-    pub fn from_bytes(bytes: [u8; 32]) -> Option<Self> {
-        k256::SecretKey::from_bytes(&bytes.into())
-            .ok()
-            .map(Self::new)
+        loop {
+            let scalar = Scalar::rand(&mut OsRng);
+            if scalar != Scalar::ZERO {
+                return Self {
+                    scalar,
+                    public_key: PublicKey((Point::generator() * scalar).into_affine()),
+                };
+            }
+        }
     }
 
     pub fn public_key(&self) -> PublicKey {
         self.public_key
     }
-
-    fn new(key: k256::SecretKey) -> Self {
-        Self {
-            public_key: PublicKey(*key.public_key().as_affine()),
-            key,
-        }
-    }
 }
 
 impl PublicKey {
-    /// The compressed SEC1 encoding.
-    pub fn to_bytes(&self) -> [u8; 33] {
-        let encoded = self.0.to_encoded_point(true);
-        let mut bytes = [0; 33];
-        bytes.copy_from_slice(encoded.as_bytes());
-        bytes
+    /// The key of the coordinates, if they are a point on the curve.
+    pub fn from_coordinates(x: Fr, y: Fr) -> Option<Self> {
+        point_from_coordinates(x, y).map(Self)
     }
 
-    /// The key of a compressed SEC1 encoding, if it is a point of the curve other than the point at infinity.
-    pub fn from_bytes(bytes: [u8; 33]) -> Option<Self> {
-        k256::PublicKey::from_sec1_bytes(&bytes)
-            .ok()
-            .map(|key| Self(*key.as_affine()))
+    pub fn coordinates(&self) -> [Fr; 2] {
+        let (x, y) = coordinates(self.0);
+        [x, y]
     }
 }
 
-/// The ciphertext, the nonce and the sender's public key, as bincode encodes them.
-#[derive(Serialize, Deserialize)]
-struct Envelope {
-    cipher: Vec<u8>,
-    nonce: [u8; 12],
-    sender: PublicKey,
-}
-
-/// Encrypts a message to a receiver with a new sender key and a random nonce.
-pub fn encrypt(message: &[u8], receiver: &PublicKey) -> Result<Vec<u8>, Error> {
-    let sender = SecretKey::random();
-    let shared = ProjectivePoint::from(receiver.0) * sender.key.to_nonzero_scalar().as_ref();
-    let cipher_key = aes(receiver, shared)?;
-    let nonce: [u8; 12] = Aes256Gcm::generate_nonce(&mut OsRng).into();
-    let cipher = cipher_key
-        .encrypt(&nonce.into(), message)
-        .map_err(|_| Error::Encryption(message.len()))?;
-    Ok(bincode::serialize(&Envelope {
-        cipher,
-        nonce,
-        sender: sender.public_key(),
-    })?)
-}
-
-/// Decrypts a ciphertext with the receiver's secret key.
-pub fn decrypt(ciphertext: &[u8], receiver: &SecretKey) -> Result<Vec<u8>, Error> {
-    let envelope: Envelope = bincode::deserialize(ciphertext)?;
-    let shared =
-        ProjectivePoint::from(envelope.sender.0) * receiver.key.to_nonzero_scalar().as_ref();
-    aes(&receiver.public_key, shared)?
-        .decrypt(&envelope.nonce.into(), envelope.cipher.as_slice())
-        .map_err(|_| Error::Decryption)
-}
-
-/// The AES-256-GCM cipher of the SHA-256 hash of the compressed receiver key and the compressed shared point.
-fn aes(receiver: &PublicKey, shared: ProjectivePoint) -> Result<Aes256Gcm, Error> {
-    let shared = shared.to_affine().to_encoded_point(true);
-    if shared.is_identity() {
-        return Err(Error::SharedPoint);
+impl Ciphertext {
+    /// The ephemeral key, the tag and the masked message, each field element as 32 big-endian bytes.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let [x, y] = self.ephemeral_key.coordinates();
+        [x, y, self.tag]
+            .iter()
+            .chain(&self.masked)
+            .flat_map(|&field| to_bytes(field))
+            .collect()
     }
-    let key = Sha256::new()
-        .chain_update(receiver.to_bytes())
-        .chain_update(shared.as_bytes())
-        .finalize();
-    Ok(Aes256Gcm::new(&key))
+
+    /// The ciphertext of bytes that `to_bytes` wrote, or `None` for other bytes.
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        let (words, rest) = bytes.as_chunks::<32>();
+        if !rest.is_empty() {
+            return None;
+        }
+        let fields = words
+            .iter()
+            .map(|&word| from_bytes(word).ok())
+            .collect::<Option<Vec<Fr>>>()?;
+        let (&[x, y, tag], masked) = fields.split_first_chunk::<3>()?;
+        Some(Self {
+            ephemeral_key: PublicKey::from_coordinates(x, y)?,
+            tag,
+            masked: masked.to_vec(),
+        })
+    }
+}
+
+/// The hash of the shared point, which only the two parties compute. The point is never at infinity, as both keys are
+/// nonzero and the group has prime order.
+fn shared_key(public_key: &PublicKey, secret_key: &SecretKey) -> Fr {
+    let shared = (public_key.0 * secret_key.scalar).into_affine();
+    let (x, y) = coordinates(shared);
+    hash(Domain::SharedKey, &[x, y])
+}
+
+/// The masks of the field elements of a message, one for each index.
+fn keystream(key: Fr) -> impl Iterator<Item = Fr> {
+    (0u64..).map(move |index| hash(Domain::Keystream, &[key, Fr::from(index)]))
+}
+
+fn tag(key: Fr, message: &[Fr]) -> Fr {
+    let preimage: Vec<Fr> = std::iter::once(key)
+        .chain(message.iter().copied())
+        .collect();
+    hash(Domain::CiphertextTag, &preimage)
 }

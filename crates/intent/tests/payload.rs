@@ -4,14 +4,14 @@ use anoma_arm::delta::unit_delta;
 use anoma_arm::kind::Kind;
 use anoma_arm::resource::NullifierKey;
 use anoma_arm::{Fr, Scalar};
-use anoma_discovery::{EciesAddress, EciesSecretKeys};
+use anoma_discovery::{GrumpkinAddress, GrumpkinSecretKeys};
 use anoma_intent::{Mismatch, Offer, Payload, Terms};
 use anoma_prover::action::{LogicProof, ProvedAction};
 use anoma_prover::circuit_prover::Proof;
 
 const INTENT_LOGIC_REF: u64 = 9;
 
-fn payload() -> Payload<EciesAddress> {
+fn payload() -> Payload<GrumpkinAddress> {
     let terms = Terms {
         want_logic_ref: Fr::from(1u64),
         want_label_ref: Fr::from(2u64),
@@ -31,13 +31,14 @@ fn payload() -> Payload<EciesAddress> {
             label_ref: Fr::from(8u64),
             quantity: 4,
         },
-        rcv_total: Scalar::from(11u64),
-        receiver: EciesSecretKeys::random().address(),
+        // The largest rcv sum has a nonzero high limb.
+        rcv_total: -Scalar::from(1u64),
+        receiver: GrumpkinSecretKeys::random().address(),
     }
 }
 
 /// The action that gives up `quantity` of the offered kind and creates the intent, with empty proofs.
-fn giving_action(payload: &Payload<EciesAddress>, quantity: u128) -> ProvedAction {
+fn giving_action(payload: &Payload<GrumpkinAddress>, quantity: u128) -> ProvedAction {
     let intent = payload.intent(Fr::from(INTENT_LOGIC_REF));
     let offer = Kind::new(payload.offer.logic_ref, payload.offer.label_ref).base;
     let intent_kind = Kind::new(intent.logic_ref, intent.label_ref).base;
@@ -59,23 +60,23 @@ fn giving_action(payload: &Payload<EciesAddress>, quantity: u128) -> ProvedActio
 }
 
 #[test]
-fn from_bytes_gives_the_payload_that_to_bytes_encoded() {
+fn from_fields_gives_the_payload_that_to_fields_encoded() {
     let payload = payload();
 
-    assert_eq!(Payload::from_bytes(&payload.to_bytes()), Some(payload));
+    assert_eq!(Payload::from_fields(&payload.to_fields()), Some(payload));
 }
 
 #[test]
-fn from_bytes_fails_on_an_extra_byte() {
-    let mut bytes = payload().to_bytes();
+fn from_fields_fails_on_an_extra_field() {
+    let mut fields = payload().to_fields();
     assert!(
-        Payload::<EciesAddress>::from_bytes(&bytes).is_some(),
+        Payload::<GrumpkinAddress>::from_fields(&fields).is_some(),
         "the premise is that the encoding decodes"
     );
 
-    bytes.push(0);
+    fields.push(Fr::from(0u64));
 
-    assert_eq!(Payload::<EciesAddress>::from_bytes(&bytes), None);
+    assert_eq!(Payload::<GrumpkinAddress>::from_fields(&fields), None);
 }
 
 #[test]

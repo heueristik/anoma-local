@@ -1,7 +1,7 @@
 //! What a party gives the solvers with an intent, in the resource payload of the intent resource.
 
 use anoma_arm::delta::unit_delta;
-use anoma_arm::field::{from_bytes, to_bytes};
+use anoma_arm::field::{scalar_from_limbs, scalar_limbs, to_u128};
 use anoma_arm::kind::Kind;
 use anoma_arm::resource::{NullifierKey, Resource};
 use anoma_arm::{Fr, Scalar};
@@ -32,8 +32,8 @@ pub struct Payload<A> {
     pub receiver: A,
 }
 
-/// The length of an encoded payload without the address of the receiver, which comes last.
-const FIXED_BYTES: usize = 3 * 32 + (5 * 32 + 16) + (2 * 32 + 16) + 32;
+/// The number of field elements of an encoded payload without the address of the receiver, which comes last.
+const FIXED_FIELDS: usize = 14;
 
 /// Why a payload does not describe the actions of its intent.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -45,64 +45,67 @@ pub enum Mismatch {
 }
 
 impl<A: ReceiverAddress> Payload<A> {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(FIXED_BYTES);
-        for field in [
+    /// The fields in the order of the struct, the rcv sum as its low and high 128 bits, and the address last.
+    pub fn to_fields(&self) -> Vec<Fr> {
+        let (rcv_low, rcv_high) = scalar_limbs(self.rcv_total);
+        let mut fields = vec![
             self.nonce,
             self.rand_seed,
             self.nullifier_key.0,
             self.terms.want_logic_ref,
             self.terms.want_label_ref,
             self.terms.want_value_ref,
+            Fr::from(self.terms.want_quantity),
             self.terms.receiver_nullifier_key_commitment,
             self.terms.want_rand_seed,
-        ] {
-            bytes.extend_from_slice(&to_bytes(field));
-        }
-        bytes.extend_from_slice(&self.terms.want_quantity.to_be_bytes());
-        for field in [self.offer.logic_ref, self.offer.label_ref] {
-            bytes.extend_from_slice(&to_bytes(field));
-        }
-        bytes.extend_from_slice(&self.offer.quantity.to_be_bytes());
-        bytes.extend_from_slice(&to_bytes(self.rcv_total));
-        bytes.extend_from_slice(&self.receiver.to_bytes());
-        bytes
+            self.offer.logic_ref,
+            self.offer.label_ref,
+            Fr::from(self.offer.quantity),
+            rcv_low,
+            rcv_high,
+        ];
+        fields.extend(self.receiver.to_fields());
+        fields
     }
 
-    /// The payload of bytes that `to_bytes` wrote, or `None` for other bytes.
-    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        let mut reader = Reader(bytes);
-        let nonce = reader.field()?;
-        let rand_seed = reader.field()?;
-        let nullifier_key = NullifierKey(reader.field()?);
-        let want_logic_ref = reader.field()?;
-        let want_label_ref = reader.field()?;
-        let want_value_ref = reader.field()?;
-        let receiver_nullifier_key_commitment = reader.field()?;
-        let want_rand_seed = reader.field()?;
-        let want_quantity = u128::from_be_bytes(reader.take()?);
-        let offer = Offer {
-            logic_ref: reader.field()?,
-            label_ref: reader.field()?,
-            quantity: u128::from_be_bytes(reader.take()?),
-        };
-        let rcv_total = from_bytes(reader.take()?).ok()?;
-        let receiver = A::from_bytes(reader.0)?;
-        Some(Self {
+    /// The payload of field elements that `to_fields` wrote, or `None` for others.
+    pub fn from_fields(fields: &[Fr]) -> Option<Self> {
+        let (fixed, receiver) = fields.split_first_chunk::<FIXED_FIELDS>()?;
+        let [
             nonce,
             rand_seed,
             nullifier_key,
+            want_logic_ref,
+            want_label_ref,
+            want_value_ref,
+            want_quantity,
+            receiver_nullifier_key_commitment,
+            want_rand_seed,
+            offer_logic_ref,
+            offer_label_ref,
+            offer_quantity,
+            rcv_low,
+            rcv_high,
+        ] = *fixed;
+        Some(Self {
+            nonce,
+            rand_seed,
+            nullifier_key: NullifierKey(nullifier_key),
             terms: Terms {
                 want_logic_ref,
                 want_label_ref,
                 want_value_ref,
-                want_quantity,
+                want_quantity: to_u128(want_quantity)?,
                 receiver_nullifier_key_commitment,
                 want_rand_seed,
             },
-            offer,
-            rcv_total,
-            receiver,
+            offer: Offer {
+                logic_ref: offer_logic_ref,
+                label_ref: offer_label_ref,
+                quantity: to_u128(offer_quantity)?,
+            },
+            rcv_total: scalar_from_limbs(rcv_low, rcv_high)?,
+            receiver: A::from_fields(receiver)?,
         })
     }
 }
@@ -148,19 +151,5 @@ impl<A> Payload<A> {
             return Err(Mismatch::Delta);
         }
         Ok(partial)
-    }
-}
-
-struct Reader<'a>(&'a [u8]);
-
-impl Reader<'_> {
-    fn take<const N: usize>(&mut self) -> Option<[u8; N]> {
-        let (chunk, rest) = self.0.split_first_chunk::<N>()?;
-        self.0 = rest;
-        Some(*chunk)
-    }
-
-    fn field(&mut self) -> Option<Fr> {
-        from_bytes(self.take()?).ok()
     }
 }

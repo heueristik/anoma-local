@@ -15,8 +15,8 @@ pub enum Error {
         length: usize,
         max: usize,
     },
-    #[error("the {0} word of the resource plaintext is out of range")]
-    InvalidWord(&'static str),
+    #[error("the {0} field of the resource plaintext is out of range")]
+    InvalidField(&'static str),
     #[error("{0} is not a BN254 scalar field element")]
     NotInField(String),
 }

@@ -1,41 +1,91 @@
-use anoma_discovery::encryption::{Error, SecretKey, decrypt, encrypt};
+use anoma_arm::Fr;
+use anoma_discovery::encryption::{Ciphertext, SecretKey, decrypt, encrypt};
 
-#[test]
-fn decrypt_gives_the_message_to_the_receiver() -> anyhow::Result<()> {
-    let receiver = SecretKey::random();
-    let message = b"the plaintext of a resource";
-
-    let ciphertext = encrypt(message, &receiver.public_key())?;
-
-    assert_eq!(decrypt(&ciphertext, &receiver)?, message);
-    Ok(())
+fn message() -> Vec<Fr> {
+    [1u64, 2, 3].map(Fr::from).to_vec()
 }
 
 #[test]
-fn decrypt_errors_on_the_key_of_another_receiver() -> anyhow::Result<()> {
-    let ciphertext = encrypt(b"message", &SecretKey::random().public_key())?;
+fn decrypt_gives_the_message_to_the_receiver() {
+    let receiver = SecretKey::random();
 
-    let result = decrypt(&ciphertext, &SecretKey::random());
+    let ciphertext = encrypt(&message(), &receiver.public_key(), &SecretKey::random());
 
-    assert!(matches!(result, Err(Error::Decryption)), "got {result:?}");
-    Ok(())
+    assert_eq!(decrypt(&ciphertext, &receiver), Some(message()));
 }
 
 #[test]
-fn decrypt_errors_on_a_changed_ciphertext() -> anyhow::Result<()> {
+fn decrypt_fails_for_the_key_of_another_receiver() {
+    let ciphertext = encrypt(
+        &message(),
+        &SecretKey::random().public_key(),
+        &SecretKey::random(),
+    );
+
+    assert_eq!(decrypt(&ciphertext, &SecretKey::random()), None);
+}
+
+#[test]
+fn decrypt_fails_on_a_changed_masked_field() {
     let receiver = SecretKey::random();
-    let mut ciphertext = encrypt(b"message", &receiver.public_key())?;
+    let mut ciphertext = encrypt(&message(), &receiver.public_key(), &SecretKey::random());
     assert!(
-        decrypt(&ciphertext, &receiver).is_ok(),
+        decrypt(&ciphertext, &receiver).is_some(),
         "the premise is that the unchanged ciphertext decrypts"
     );
 
-    // The first bytes are the bincode length of the AES ciphertext, so the change hits the AES ciphertext.
-    ciphertext[8] ^= 0xff;
+    ciphertext.masked[0] += Fr::from(1u64);
 
-    assert!(matches!(
-        decrypt(&ciphertext, &receiver),
-        Err(Error::Decryption)
-    ));
-    Ok(())
+    assert_eq!(decrypt(&ciphertext, &receiver), None);
+}
+
+#[test]
+fn from_bytes_gives_the_ciphertext_that_to_bytes_encoded() {
+    let ciphertext = encrypt(
+        &message(),
+        &SecretKey::random().public_key(),
+        &SecretKey::random(),
+    );
+
+    assert_eq!(
+        Ciphertext::from_bytes(&ciphertext.to_bytes()),
+        Some(ciphertext)
+    );
+}
+
+#[test]
+fn from_bytes_fails_on_an_extra_byte() {
+    let ciphertext = encrypt(
+        &message(),
+        &SecretKey::random().public_key(),
+        &SecretKey::random(),
+    );
+    let mut bytes = ciphertext.to_bytes();
+    assert!(
+        Ciphertext::from_bytes(&bytes).is_some(),
+        "the premise is that the encoding decodes"
+    );
+
+    bytes.push(0);
+
+    assert_eq!(Ciphertext::from_bytes(&bytes), None);
+}
+
+#[test]
+fn from_bytes_fails_on_an_ephemeral_key_off_the_curve() {
+    let ciphertext = encrypt(
+        &message(),
+        &SecretKey::random().public_key(),
+        &SecretKey::random(),
+    );
+    let mut bytes = ciphertext.to_bytes();
+    assert!(
+        Ciphertext::from_bytes(&bytes).is_some(),
+        "the premise is that the encoding decodes"
+    );
+
+    // The last byte of the first word is the lowest byte of the x coordinate of the ephemeral key.
+    bytes[31] ^= 0xff;
+
+    assert_eq!(Ciphertext::from_bytes(&bytes), None);
 }

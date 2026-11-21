@@ -88,7 +88,7 @@ impl<D: Discovery, M: Matcher> Solver<D, M> {
                             .discover(&proved.action.created_app_data, &self.secret_keys)
                     })
                     .flatten()
-                    .filter_map(|bytes| Payload::<D::Address>::from_bytes(&bytes))
+                    .filter_map(|fields| Payload::<D::Address>::from_fields(&fields))
                     .filter(|payload| {
                         payload.offer.logic_ref == token_logic_ref
                             && payload.terms.want_logic_ref == token_logic_ref
@@ -205,7 +205,7 @@ impl<D: Discovery, M: Matcher> Solver<D, M> {
     /// The app data that makes `created` discoverable for the receiver of `address`, with its plaintext.
     fn app_data(&self, address: &D::Address, created: &Resource) -> Result<AppData, Error> {
         self.discovery
-            .app_data(address, &created.to_bytes())
+            .app_data(address, &created.to_fields())
             .map_err(|error| Error::Discovery(Box::new(error)))
     }
 }
