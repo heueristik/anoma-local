@@ -1,4 +1,4 @@
-//! The solver settles intents from the intent pool: Alice gives 4 apples for 4 bananas, Bob gives 7 bananas for 3
+//! The solver settles intents from an intent pool: Alice gives 4 apples for 4 bananas, Bob gives 7 bananas for 3
 //! apples, and Carol gives 5 cherries for 10 apples, which no one offers. Behind `slow-tests`: it needs nargo, bb,
 //! forge and anvil, and the first run makes the Groth16 setup.
 
@@ -13,7 +13,7 @@ use anoma_arm::resource::{NullifierKey, RESOURCE_BYTES, Resource};
 use anoma_discovery::ReceiverKeys;
 use anoma_integration_test::chain::Chain;
 use anoma_integration_test::fixtures::{self, token};
-use anoma_intent_pool::IntentPool;
+use anoma_intent_pool::{IntentPool, MemoryIntentId, MemoryIntentPool, PooledIntent};
 use anoma_prover::action::{self, ActionWitness, Logic, ProvedAction};
 use anoma_prover::transaction;
 use anoma_solver::Solver;
@@ -56,42 +56,48 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
     let belt = belt(&mints);
 
     // Each party proves the action that gives up its minted token for an intent, and submits it to the pool.
-    let mut pool = IntentPool::default();
-    let alice_intent = pool.submit(propose(
-        &mints[0],
-        belt.path(0)?,
-        alice,
-        (BANANA, 4),
-        &alice_keys,
-        &solver,
-        101,
-    )?);
-    let bob_intent = pool.submit(propose(
-        &mints[1],
-        belt.path(1)?,
-        bob,
-        (APPLE, 3),
-        &bob_keys,
-        &solver,
-        102,
-    )?);
-    let carol_intent = pool.submit(propose(
-        &mints[2],
-        belt.path(2)?,
-        carol,
-        (APPLE, 10),
-        &carol_keys,
-        &solver,
-        103,
-    )?);
+    let mut pool = MemoryIntentPool::default();
+    let alice_intent = pool
+        .submit(propose(
+            &mints[0],
+            belt.path(0)?,
+            alice,
+            (BANANA, 4),
+            &alice_keys,
+            &solver,
+            101,
+        )?)
+        .await?;
+    let bob_intent = pool
+        .submit(propose(
+            &mints[1],
+            belt.path(1)?,
+            bob,
+            (APPLE, 3),
+            &bob_keys,
+            &solver,
+            102,
+        )?)
+        .await?;
+    let carol_intent = pool
+        .submit(propose(
+            &mints[2],
+            belt.path(2)?,
+            carol,
+            (APPLE, 10),
+            &carol_keys,
+            &solver,
+            103,
+        )?)
+        .await?;
 
     let solution = solver
-        .solve(prover, &pool, belt.root())?
+        .solve(prover, &pool.intents().await?, belt.root())?
         .context("the solver fills no intent")?;
     assert_eq!(solution.filled, [alice_intent, bob_intent]);
     assert_eq!(
-        pool.len(),
-        3,
+        ids(&pool).await?,
+        [alice_intent, bob_intent, carol_intent],
         "the filled intents stay in the pool until the chain executes the settlement"
     );
 
@@ -107,10 +113,9 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
     let settlement = transaction::prove(prover, &wrapper, &solution.partial, &chain.deployment)?;
     chain.execute(&settlement).await?;
     for &id in &solution.filled {
-        pool.take(id);
+        pool.remove(id).await?;
     }
-    assert_eq!(pool.len(), 1);
-    assert!(pool.get(carol_intent).is_some());
+    assert_eq!(ids(&pool).await?, [carol_intent]);
     let label = |label: u64| Fr::from(label);
     assert_eq!(
         received(&settlement.actions, &alice_keys),
@@ -142,7 +147,6 @@ fn solve_fills_a_copied_intent_once() -> anyhow::Result<()> {
         fixtures::mint(token(BANANA, bananas, bob, 12)?, 22)?,
     ];
     let belt = belt(&mints);
-    let mut pool = IntentPool::default();
     let alice_actions = propose(
         &mints[0],
         belt.path(0)?,
@@ -152,8 +156,7 @@ fn solve_fills_a_copied_intent_once() -> anyhow::Result<()> {
         &solver,
         101,
     )?;
-    let alice_intent = pool.submit(alice_actions.clone());
-    let bob_intent = pool.submit(propose(
+    let bob_actions = propose(
         &mints[1],
         belt.path(1)?,
         bob,
@@ -161,19 +164,22 @@ fn solve_fills_a_copied_intent_once() -> anyhow::Result<()> {
         &ReceiverKeys::random(),
         &solver,
         102,
-    )?);
-
+    )?;
     // Anyone can submit the actions of Alice again; a fill of both copies would consume her apples twice.
-    pool.submit(alice_actions);
+    let intents = [
+        intent("alice", alice_actions.clone()),
+        intent("bob", bob_actions),
+        intent("copy of alice", alice_actions),
+    ];
     assert!(
         bananas >= 2 * wanted_bananas && 2 * apples >= wanted_apples,
         "the premise is that both copies and the intent of Bob balance together"
     );
 
     let solution = solver
-        .solve(fixtures::circuit_prover(), &pool, belt.root())?
+        .solve(fixtures::circuit_prover(), &intents, belt.root())?
         .context("the solver fills no intent")?;
-    assert_eq!(solution.filled, [alice_intent, bob_intent]);
+    assert_eq!(solution.filled, ["alice", "bob"]);
     Ok(())
 }
 
@@ -189,8 +195,7 @@ fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
         fixtures::mint(token(APPLE, apples, dave, 14)?, 24)?,
     ];
     let belt = belt(&mints);
-    let mut pool = IntentPool::default();
-    let alice_intent = pool.submit(propose(
+    let alice_actions = propose(
         &mints[0],
         belt.path(0)?,
         alice,
@@ -198,8 +203,8 @@ fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
         &ReceiverKeys::random(),
         &solver,
         101,
-    )?);
-    let bob_intent = pool.submit(propose(
+    )?;
+    let bob_actions = propose(
         &mints[1],
         belt.path(1)?,
         bob,
@@ -207,7 +212,7 @@ fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
         &ReceiverKeys::random(),
         &solver,
         102,
-    )?);
+    )?;
     let mut dave_actions = propose(
         &mints[2],
         belt.path(2)?,
@@ -225,13 +230,96 @@ fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
     let proof = &mut dave_actions[0].compliance_proof.fields;
     let middle = proof.len() / 2;
     proof[middle] += Fr::from(1u64);
-    pool.submit(dave_actions);
+    let intents = [
+        intent("alice", alice_actions),
+        intent("bob", bob_actions),
+        intent("dave", dave_actions),
+    ];
 
     let solution = solver
-        .solve(fixtures::circuit_prover(), &pool, belt.root())?
+        .solve(fixtures::circuit_prover(), &intents, belt.root())?
         .context("the solver fills no intent")?;
-    assert_eq!(solution.filled, [alice_intent, bob_intent]);
+    assert_eq!(solution.filled, ["alice", "bob"]);
     Ok(())
+}
+
+#[test]
+fn solve_skips_an_intent_whose_payload_is_for_another_solver() -> anyhow::Result<()> {
+    let [alice, bob, dave, sally, trent] =
+        [1u64, 2, 5, 4, 6].map(|seed| NullifierKey(Fr::from(seed)));
+    let other_solver = solver(trent);
+    let solver = solver(sally);
+    let (apples, bananas) = (4, 7);
+    let (alice_wants, bob_wants, dave_wants) = (4, 3, 3);
+    let mints = [
+        fixtures::mint(token(APPLE, apples, alice, 11)?, 21)?,
+        fixtures::mint(token(BANANA, bananas, bob, 12)?, 22)?,
+        fixtures::mint(token(APPLE, apples, dave, 14)?, 24)?,
+    ];
+    let belt = belt(&mints);
+    let intents = [
+        intent(
+            "alice",
+            propose(
+                &mints[0],
+                belt.path(0)?,
+                alice,
+                (BANANA, alice_wants),
+                &ReceiverKeys::random(),
+                &solver,
+                101,
+            )?,
+        ),
+        intent(
+            "bob",
+            propose(
+                &mints[1],
+                belt.path(1)?,
+                bob,
+                (APPLE, bob_wants),
+                &ReceiverKeys::random(),
+                &solver,
+                102,
+            )?,
+        ),
+        intent(
+            "dave",
+            propose(
+                &mints[2],
+                belt.path(2)?,
+                dave,
+                (BANANA, dave_wants),
+                &ReceiverKeys::random(),
+                &other_solver,
+                105,
+            )?,
+        ),
+    ];
+    assert!(
+        2 * apples >= bob_wants && bananas >= alice_wants + dave_wants,
+        "the premise is that the intents of Alice, Bob and Dave balance together"
+    );
+
+    let solution = solver
+        .solve(fixtures::circuit_prover(), &intents, belt.root())?
+        .context("the solver fills no intent")?;
+    assert_eq!(solution.filled, ["alice", "bob"]);
+    Ok(())
+}
+
+/// An intent that a test names, as a pool gives it.
+fn intent(name: &'static str, actions: Vec<ProvedAction>) -> PooledIntent<&'static str> {
+    PooledIntent { id: name, actions }
+}
+
+/// The ids of the intents in the pool.
+async fn ids(pool: &MemoryIntentPool) -> anyhow::Result<Vec<MemoryIntentId>> {
+    Ok(pool
+        .intents()
+        .await?
+        .iter()
+        .map(|intent| intent.id)
+        .collect())
 }
 
 /// A solver that trades tokens of the trivial logic and keeps its surplus for `owner`.

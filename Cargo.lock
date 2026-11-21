@@ -1069,9 +1069,9 @@ name = "anoma-intent-pool"
 version = "0.1.0"
 dependencies = [
  "anoma-arm",
- "anoma-discovery",
  "anoma-prover",
  "anyhow",
+ "tokio",
 ]
 
 [[package]]

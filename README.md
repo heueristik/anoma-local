@@ -15,7 +15,7 @@ The terms are in [CONTEXT.md](CONTEXT.md).
 | `crates/prover` | Proves actions and transactions with nargo, bb and the Groth16 wrap |
 | `crates/discovery` | Resource discovery as in Anoma Galileo: ECIES on secp256k1 and trial decryption |
 | `crates/intent` | The intent resource, the inputs of its logic, and the payload for the solver |
-| `crates/intent-pool` | A mock intent pool, which solvers search by discovery |
+| `crates/intent-pool` | The port to an intent pool, and a pool in memory |
 | `crates/solver` | A solver that matches intents with the CP-SAT solver of OR-Tools |
 | `crates/bindings` | The Rust bindings of the `AnomaVerifier` |
 | `crates/integration-test` | The fixtures and the anvil chain of the end-to-end tests |

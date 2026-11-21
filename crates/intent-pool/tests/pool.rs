@@ -1,20 +1,19 @@
 use anoma_arm::digest::{Action, AppData};
 use anoma_arm::{Fr, Point};
-use anoma_discovery::{ReceiverKeys, app_data};
-use anoma_intent_pool::IntentPool;
+use anoma_intent_pool::{IntentPool, MemoryIntentPool, PooledIntent};
 use anoma_prover::action::{LogicProof, ProvedAction};
 use anoma_prover::circuit_prover::Proof;
 
-/// An action whose created resource has the app data, with empty proofs: the pool checks no proof.
-fn action(created_app_data: AppData) -> ProvedAction {
+/// An action with the nullifier `nullifier` and empty proofs: the pool checks no proof.
+fn action(nullifier: u64) -> ProvedAction {
     ProvedAction {
         action: Action {
-            nullifier: Fr::from(1u64),
+            nullifier: Fr::from(nullifier),
             consumed_logic_ref: Fr::from(2u64),
             consumed_app_data: AppData::default(),
             commitment: Fr::from(3u64),
             created_logic_ref: Fr::from(4u64),
-            created_app_data,
+            created_app_data: AppData::default(),
             commitment_tree_root: Fr::from(0u64),
         },
         delta: Point::default(),
@@ -24,37 +23,56 @@ fn action(created_app_data: AppData) -> ProvedAction {
     }
 }
 
-#[test]
-fn discover_finds_only_the_intents_for_the_keys_with_their_payloads() -> anyhow::Result<()> {
-    let solver = ReceiverKeys::random();
-    let mut pool = IntentPool::default();
-    let for_solver = pool.submit(vec![action(app_data(&solver.receiver(), b"terms")?)]);
-    pool.submit(vec![action(app_data(
-        &ReceiverKeys::random().receiver(),
-        b"other terms",
-    )?)]);
-    pool.submit(vec![action(AppData::default())]);
+#[tokio::test]
+async fn intents_gives_the_submitted_intents_in_the_order_of_submission() -> anyhow::Result<()> {
+    let mut pool = MemoryIntentPool::default();
+    let first = pool.submit(vec![action(1)]).await?;
+    let second = pool.submit(vec![action(2), action(3)]).await?;
 
-    let discovered = pool.discover(&solver);
+    let intents = pool.intents().await?;
 
-    let [found] = &discovered[..] else {
-        anyhow::bail!("expected one intent, got {discovered:?}");
-    };
-    assert_eq!(found.id, for_solver);
-    assert_eq!(found.payloads, [b"terms".to_vec()]);
+    assert_eq!(
+        intents,
+        [
+            PooledIntent {
+                id: first,
+                actions: vec![action(1)],
+            },
+            PooledIntent {
+                id: second,
+                actions: vec![action(2), action(3)],
+            },
+        ]
+    );
     Ok(())
 }
 
-#[test]
-fn take_removes_the_intent_from_the_pool() -> anyhow::Result<()> {
-    let solver = ReceiverKeys::random();
-    let mut pool = IntentPool::default();
-    let id = pool.submit(vec![action(app_data(&solver.receiver(), b"terms")?)]);
+#[tokio::test]
+async fn remove_removes_only_the_intent_with_the_id() -> anyhow::Result<()> {
+    let mut pool = MemoryIntentPool::default();
+    let removed = pool.submit(vec![action(1)]).await?;
+    let kept = pool.submit(vec![action(2)]).await?;
 
-    let taken = pool.take(id);
+    pool.remove(removed).await?;
 
-    assert!(taken.is_some());
-    assert!(pool.is_empty());
-    assert!(pool.discover(&solver).is_empty());
+    let ids: Vec<_> = pool
+        .intents()
+        .await?
+        .iter()
+        .map(|intent| intent.id)
+        .collect();
+    assert_eq!(ids, [kept]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn submit_gives_a_new_id_to_a_copy_of_an_intent() -> anyhow::Result<()> {
+    let mut pool = MemoryIntentPool::default();
+    let original = pool.submit(vec![action(1)]).await?;
+    pool.remove(original).await?;
+
+    let copy = pool.submit(vec![action(1)]).await?;
+
+    assert_ne!(copy, original);
     Ok(())
 }

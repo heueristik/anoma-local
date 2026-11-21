@@ -1,68 +1,42 @@
-//! A mock intent pool: an in-memory list of intents, each the proved actions of a partial transaction. A solver finds
-//! the intents for it by trial decryption of the discovery payloads of their created resources, as the Galileo
-//! indexer finds resources. The pool checks no proof and no payload; a solver checks what it takes.
+//! The port to an intent pool, which holds intents until the chain executes a transaction that fills them, and a pool
+//! in memory. An intent is the proved actions of an unbalanced partial transaction. A pool checks no proof and no
+//! payload; a solver checks what it takes.
 
-use std::collections::BTreeMap;
+mod memory;
 
-use anoma_discovery::{ReceiverKeys, discover};
+use std::fmt::Debug;
+use std::future::Future;
+
 use anoma_prover::action::ProvedAction;
 
-/// The number of an intent in the pool, in the order of submission.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct IntentId(u64);
+pub use memory::{MemoryIntentId, MemoryIntentPool};
 
-/// An intent whose discovery payload is for the keys of a solver, and its resource payloads that the solver decrypts.
+/// An intent in a pool: its id in the pool, and its proved actions.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Discovered {
-    pub id: IntentId,
-    pub payloads: Vec<Vec<u8>>,
+pub struct PooledIntent<Id> {
+    pub id: Id,
+    pub actions: Vec<ProvedAction>,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct IntentPool {
-    intents: BTreeMap<IntentId, Vec<ProvedAction>>,
-    next_id: u64,
-}
+/// Holds the intents that parties submit, for the solvers.
+pub trait IntentPool {
+    type IntentId: Copy + Ord + Debug;
+    type Error: std::error::Error + Send + Sync + 'static;
 
-impl IntentPool {
-    pub fn submit(&mut self, actions: Vec<ProvedAction>) -> IntentId {
-        let id = IntentId(self.next_id);
-        self.next_id += 1;
-        self.intents.insert(id, actions);
-        id
-    }
+    fn submit(
+        &mut self,
+        actions: Vec<ProvedAction>,
+    ) -> impl Future<Output = Result<Self::IntentId, Self::Error>> + Send;
 
-    /// The intents with a created resource whose discovery payload is for the keys, in the order of submission.
-    pub fn discover(&self, keys: &ReceiverKeys) -> Vec<Discovered> {
-        self.intents
-            .iter()
-            .filter_map(|(&id, actions)| {
-                let found: Vec<Vec<Vec<u8>>> = actions
-                    .iter()
-                    .filter_map(|proved| discover(&proved.action.created_app_data, keys))
-                    .collect();
-                (!found.is_empty()).then(|| Discovered {
-                    id,
-                    payloads: found.into_iter().flatten().collect(),
-                })
-            })
-            .collect()
-    }
+    /// All intents of the pool, in the order of submission.
+    fn intents(
+        &self,
+    ) -> impl Future<Output = Result<Vec<PooledIntent<Self::IntentId>>, Self::Error>> + Send;
 
-    pub fn get(&self, id: IntentId) -> Option<&[ProvedAction]> {
-        self.intents.get(&id).map(Vec::as_slice)
-    }
-
-    /// Removes an intent, once the chain executes a transaction that fills it.
-    pub fn take(&mut self, id: IntentId) -> Option<Vec<ProvedAction>> {
-        self.intents.remove(&id)
-    }
-
-    pub fn len(&self) -> usize {
-        self.intents.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.intents.is_empty()
-    }
+    /// Removes an intent, once the chain executes a transaction that fills it. The removal of an unknown intent does
+    /// nothing.
+    fn remove(
+        &mut self,
+        id: Self::IntentId,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
 }

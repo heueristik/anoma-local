@@ -1,6 +1,6 @@
-//! A solver of intents. It finds the intents for its keys in an intent pool, checks their payloads and proofs, chooses
+//! A solver of intents. It finds the intents whose payloads are for its keys, checks their payloads and proofs, chooses
 //! with CP-SAT the most intents that balance together, and proves the actions that fill them and that take the
-//! surplus. The result is a balanced partial transaction, which the solver proves and sends.
+//! surplus. The result is a balanced partial transaction, which the caller proves and sends.
 
 pub mod matching;
 
@@ -8,9 +8,9 @@ use std::collections::BTreeSet;
 
 use anoma_arm::resource::{NullifierKey, Resource};
 use anoma_arm::{Fr, Scalar};
-use anoma_discovery::ReceiverKeys;
+use anoma_discovery::{ReceiverKeys, discover};
 use anoma_intent::Payload;
-use anoma_intent_pool::{IntentId, IntentPool};
+use anoma_intent_pool::PooledIntent;
 use anoma_prover::PartialTransaction;
 use anoma_prover::action::{self, ActionWitness, Logic};
 use anoma_prover::circuit_prover::{CircuitError, CircuitProver};
@@ -39,52 +39,52 @@ pub struct Solver {
     pub token_logic: Logic,
 }
 
-/// A balanced partial transaction, and the intents of the pool that it fills, which the caller takes from the pool once
-/// the chain executes the transaction.
-pub struct Solution {
+/// A balanced partial transaction, and the ids of the intents that it fills, which the caller removes from the pool
+/// once the chain executes the transaction.
+pub struct Solution<Id> {
     pub partial: PartialTransaction,
-    pub filled: Vec<IntentId>,
+    pub filled: Vec<Id>,
 }
 
 /// An intent that the solver can fill: its payload, and its actions as the payload checked them.
-struct Candidate {
-    id: IntentId,
+struct Candidate<Id> {
+    id: Id,
     payload: Payload,
     partial: PartialTransaction,
 }
 
 impl Solver {
-    /// Fills the most intents of the pool that balance together, and leaves them in the pool. Its actions of ephemeral
-    /// resources show `commitment_tree_root`, a recent root of the chain. Returns `None` if it fills none.
-    pub fn solve(
+    /// Fills the most of the intents that balance together. Its actions of ephemeral resources show
+    /// `commitment_tree_root`, a recent root of the chain. Returns `None` if it fills none.
+    pub fn solve<Id: Copy>(
         &self,
         prover: &impl CircuitProver,
-        pool: &IntentPool,
+        intents: &[PooledIntent<Id>],
         commitment_tree_root: Fr,
-    ) -> Result<Option<Solution>, Error> {
+    ) -> Result<Option<Solution<Id>>, Error> {
         let logic_keys = [
             prover.verification_key(&self.token_logic.circuit)?,
             prover.verification_key(anoma_intent::CIRCUIT)?,
         ];
         let (token_logic_ref, intent_logic_ref) = (logic_keys[0].hash, logic_keys[1].hash);
         let mut nullifiers = BTreeSet::new();
-        let candidates: Vec<Candidate> = pool
-            .discover(&self.keys)
-            .into_iter()
-            .filter_map(|discovered| {
-                let actions = pool.get(discovered.id)?;
-                discovered
-                    .payloads
+        let candidates: Vec<Candidate<Id>> = intents
+            .iter()
+            .filter_map(|intent| {
+                intent
+                    .actions
                     .iter()
-                    .filter_map(|bytes| Payload::from_bytes(bytes))
+                    .filter_map(|proved| discover(&proved.action.created_app_data, &self.keys))
+                    .flatten()
+                    .filter_map(|bytes| Payload::from_bytes(&bytes))
                     .filter(|payload| {
                         payload.offer.logic_ref == token_logic_ref
                             && payload.terms.want_logic_ref == token_logic_ref
                     })
                     .find_map(|payload| {
-                        let partial = payload.check(actions, intent_logic_ref).ok()?;
+                        let partial = payload.check(&intent.actions, intent_logic_ref).ok()?;
                         Some(Candidate {
-                            id: discovered.id,
+                            id: intent.id,
                             payload,
                             partial,
                         })
