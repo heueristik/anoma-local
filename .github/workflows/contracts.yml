@@ -1,0 +1,74 @@
+name: Contracts
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Each job states the permissions that it needs.
+permissions: {}
+
+# A new push to a pull request cancels the run of the previous push.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  tests:
+    name: Contracts Tests
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    env:
+      FOUNDRY_PROFILE: ci
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Show Foundry version
+        run: forge --version
+
+      - name: Show Soldeer version
+        run: forge soldeer version
+
+      - name: Install dependencies
+        run: just contracts-deps
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Show Bun version
+        run: bun --version
+
+      - name: Install the contract tooling
+        run: just contracts-tooling
+
+      - name: Lint contracts
+        run: just contracts-lint
+
+      - name: Install Slither
+        run: pip install slither-analyzer
+
+      - name: Show Slither version
+        run: slither --version
+
+      - name: Run Slither Static Analyzer
+        run: just contracts-static-analysis
+
+      - name: Run Forge fmt
+        run: just contracts-fmt-check
+
+      - name: Run Forge tests
+        run: just contracts-test

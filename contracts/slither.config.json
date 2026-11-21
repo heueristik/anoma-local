@@ -1,0 +1,10 @@
+{
+  "filter_paths": "dependencies/|vendor/",
+  "detectors_to_exclude": [
+    "assembly",
+    "calls-loop",
+    "locked-ether",
+    "naming-convention",
+    "pragma"
+  ]
+}

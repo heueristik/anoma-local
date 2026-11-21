@@ -1,0 +1,41 @@
+{
+  "plugins": [],
+  "rules": {
+    "explicit-types": "error",
+    "function-max-lines": ["warn", 150],
+    "max-line-length": ["warn", 120],
+    "max-states-count": "error",
+    "no-console": "error",
+    "no-unused-vars": "error",
+    "use-natspec": "warn",
+
+    "payable-fallback": "error",
+    "duplicated-imports": "error",
+    "contract-name-capwords": "error",
+    "event-name-capwords": "error",
+
+    "func-named-parameters": "error",
+    "named-parameters-mapping": "error",
+    "private-vars-leading-underscore": "error",
+    "use-forbidden-name": "error",
+
+    "imports-on-top": "warn",
+    "imports-order": "warn",
+    "ordering": "warn",
+    "visibility-modifier-order": "error",
+    "gas-calldata-parameters": "warn",
+    "gas-multitoken1155": "warn",
+    "gas-named-return-values": "warn",
+    "gas-small-strings": "warn",
+    "gas-struct-packing": "warn",
+    "comprehensive-interface": "error",
+    "check-send-result": "error",
+    "compiler-version": ["error", "^0.8.24"],
+
+    "multiple-sends": "error",
+    "no-complex-fallback": "error",
+    "no-immutable-before-declaration": "warn",
+    "not-rely-on-time": "error",
+    "state-visibility": "error"
+  }
+}
