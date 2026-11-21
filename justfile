@@ -152,6 +152,10 @@ crates-test *args:
 crates-test-slow *args: circuits-keys
     NARGO={{ nargo }} BB={{ bb }} cargo test --workspace --all-features {{ args }} -- --test-threads 1
 
+# Print the time of each proof of a wrap, a transfer and an unwrap as a Markdown table
+crates-prove-times: circuits-keys
+    NARGO={{ nargo }} BB={{ bb }} cargo bench -p anoma-integration-test --features slow-tests --bench prove_times
+
 # Lint the crates for both feature sets
 crates-lint:
     cargo clippy --workspace --all-targets --no-deps -- -Dwarnings

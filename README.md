@@ -67,6 +67,8 @@ The chain is the ABI of the AnomaVerifier. `crates/bindings` and the `Chain` of 
 
 `just crates-test-slow` also runs the tests that prove transactions and execute them on anvil. The first run makes the Groth16 setup of the root circuit, which takes minutes and about 8 GB of memory. Later runs read the keys from `target/tmp/wrap-keys`. This setup has one party, so that party can make false proofs; a deployment needs a setup with many parties.
 
+`just crates-prove-times` prints the time of each proof of a wrap, a transfer and an unwrap as a Markdown table. It uses the same keys.
+
 ## License
 
 Apache-2.0, see [LICENSE](LICENSE). The Poseidon2 contract in `contracts/vendor/` comes from the Privacy Boost protocol, under its own Apache-2.0 license.
