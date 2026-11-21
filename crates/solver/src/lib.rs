@@ -6,11 +6,10 @@ pub mod matching;
 
 use std::collections::BTreeMap;
 
-use anoma_arm::belt::{Belt, MembershipPath};
 use anoma_arm::digest::AppData;
 use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
 use anoma_arm::{Fr, Scalar};
-use anoma_discovery::{Receiver, ReceiverKeys};
+use anoma_discovery::ReceiverKeys;
 use anoma_intent::Payload;
 use anoma_intent_pool::{IntentId, IntentPool};
 use anoma_prover::PartialTransaction;
@@ -160,8 +159,7 @@ impl Solver {
             )?,
             consumed_app_data: AppData::default(),
             nullifier_key: payload.nullifier_key,
-            path: MembershipPath::default(),
-            commitment_tree_root: Belt::default().root(),
+            path: None,
             created,
             created_logic: self.token_logic.clone(),
             created_app_data: anoma_discovery::app_data(&payload.receiver, &created.to_bytes())?,
@@ -171,41 +169,26 @@ impl Solver {
 
     /// The action that creates the surplus of a kind for the solver from an ephemeral resource of quantity 0.
     fn take_surplus(&self, kind: KindRef, quantity: u128) -> Result<ActionWitness, Error> {
-        let source = NullifierKey(random());
-        let consumed = Resource {
+        let created = Resource {
             logic_ref: kind.logic_ref,
             label_ref: kind.label_ref,
             value_ref: Fr::from(0u64),
-            quantity: 0,
-            nonce: random(),
-            nullifier_key_commitment: source.commitment(),
-            is_ephemeral: true,
-            rand_seed: random(),
-        };
-        let created = Resource {
             quantity,
-            nonce: created_nonce(consumed.nullifier(source)?),
+            nonce: Fr::from(0u64),
             nullifier_key_commitment: self.owner.commitment(),
             is_ephemeral: false,
             rand_seed: random(),
-            ..consumed
         };
-        Ok(ActionWitness {
-            consumed,
-            consumed_logic: self.token_logic.clone(),
-            consumed_app_data: AppData::default(),
-            nullifier_key: source,
-            path: MembershipPath::default(),
-            commitment_tree_root: Belt::default().root(),
+        let mut witness = ActionWitness::from_ephemeral(
             created,
-            created_logic: self.token_logic.clone(),
-            created_app_data: anoma_discovery::app_data(&self.receiver(), &created.to_bytes())?,
-            rcv: random(),
-        })
-    }
-
-    fn receiver(&self) -> Receiver {
-        self.keys.receiver()
+            0,
+            NullifierKey(random()),
+            self.token_logic.clone(),
+            random(),
+        )?;
+        witness.created_app_data =
+            anoma_discovery::app_data(&self.keys.receiver(), &witness.created.to_bytes())?;
+        Ok(witness)
     }
 }
 

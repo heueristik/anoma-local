@@ -12,9 +12,7 @@ use anoma_arm::digest::Action;
 use anoma_arm::resource::{NullifierKey, RESOURCE_BYTES, Resource};
 use anoma_discovery::ReceiverKeys;
 use anoma_integration_test::chain::Chain;
-use anoma_integration_test::fixtures::{
-    self, Membership, intent_logic_ref, token, token_logic_ref,
-};
+use anoma_integration_test::fixtures::{self, intent_logic_ref, token, token_logic_ref};
 use anoma_intent::Terms;
 use anoma_intent_pool::IntentPool;
 use anoma_prover::action::{self, Logic};
@@ -70,10 +68,7 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
         let actions = fixtures::propose(
             mints[index].created,
             owner,
-            Membership::Tree {
-                path: belt.path(index)?,
-                root: belt.root(),
-            },
+            belt.path(index)?,
             terms(want, min_quantity, owner)?,
             receiver.receiver(),
             &solver.keys.receiver(),

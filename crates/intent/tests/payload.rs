@@ -6,7 +6,7 @@ use anoma_arm::{Fr, Scalar};
 use anoma_discovery::ReceiverKeys;
 use anoma_intent::{Mismatch, Offer, Payload, Terms};
 use anoma_prover::action::{LogicProof, ProvedAction};
-use anoma_prover::toolchain::{Proof, VerificationKey};
+use anoma_prover::toolchain::Proof;
 
 const INTENT_LOGIC_REF: u64 = 9;
 
@@ -41,17 +41,6 @@ fn payload() -> Payload {
 fn giving_action(payload: &Payload, quantity: u128) -> ProvedAction {
     let offer = Kind::new(payload.offer.logic_ref, payload.offer.label_ref).base;
     let intent = Kind::new(payload.intent.logic_ref, payload.intent.label_ref).base;
-    let empty_proof = Proof {
-        fields: Vec::new(),
-        public_inputs: Vec::new(),
-    };
-    let empty_logic_proof = LogicProof {
-        verification_key: VerificationKey {
-            fields: Vec::new(),
-            hash: Fr::from(0u64),
-        },
-        proof: empty_proof.clone(),
-    };
     ProvedAction {
         action: Action {
             nullifier: Fr::from(12u64),
@@ -63,9 +52,9 @@ fn giving_action(payload: &Payload, quantity: u128) -> ProvedAction {
             commitment_tree_root: Fr::from(0u64),
         },
         delta: unit_delta(offer, quantity, intent, 1, payload.rcv_total),
-        compliance_proof: empty_proof,
-        consumed_logic_proof: empty_logic_proof.clone(),
-        created_logic_proof: empty_logic_proof,
+        compliance_proof: Proof::default(),
+        consumed_logic_proof: LogicProof::default(),
+        created_logic_proof: LogicProof::default(),
     }
 }
 

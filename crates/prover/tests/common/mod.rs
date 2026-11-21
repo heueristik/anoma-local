@@ -4,9 +4,7 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use anoma_arm::Fr;
-use anoma_arm::belt::MembershipPath;
-use anoma_arm::digest::AppData;
-use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
+use anoma_arm::resource::{NullifierKey, Resource};
 use anoma_prover::action::{ActionWitness, Logic};
 use anoma_prover::toolchain::Toolchain;
 use anyhow::Context;
@@ -35,10 +33,9 @@ pub fn wrap_keys_directory() -> PathBuf {
 }
 
 pub fn trivial_logic_ref() -> anyhow::Result<Fr> {
-    Ok(toolchain()
-        .verification_key(&Logic::trivial().circuit)
-        .context("write the key of the trivial logic")?
-        .hash)
+    toolchain()
+        .key_hash(&Logic::trivial().circuit)
+        .context("write the key of the trivial logic")
 }
 
 pub fn nullifier_key(seed: u64) -> NullifierKey {
@@ -65,25 +62,11 @@ pub fn ephemeral_action(
     consumed_quantity: u128,
     created_quantity: u128,
 ) -> anyhow::Result<ActionWitness> {
-    let consumed = Resource {
-        is_ephemeral: true,
-        ..trivial_resource(seed, 1, consumed_quantity)?
-    };
-    let nullifier = consumed.nullifier(nullifier_key(seed))?;
-    let created = Resource {
-        nonce: created_nonce(nullifier),
-        ..trivial_resource(seed + 1, 1, created_quantity)?
-    };
-    Ok(ActionWitness {
-        consumed,
-        consumed_logic: Logic::trivial(),
-        consumed_app_data: AppData::default(),
-        nullifier_key: nullifier_key(seed),
-        path: MembershipPath::default(),
-        commitment_tree_root: Fr::from(0u64),
-        created,
-        created_logic: Logic::trivial(),
-        created_app_data: AppData::default(),
-        rcv: anoma_arm::Scalar::from(4000 + seed),
-    })
+    Ok(ActionWitness::from_ephemeral(
+        trivial_resource(seed, 1, created_quantity)?,
+        consumed_quantity,
+        nullifier_key(seed),
+        Logic::trivial(),
+        anoma_arm::Scalar::from(4000 + seed),
+    )?)
 }

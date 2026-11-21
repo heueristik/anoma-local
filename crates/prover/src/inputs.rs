@@ -17,6 +17,16 @@ impl Serialize for Field {
     }
 }
 
+/// A quantity, which nargo reads as a decimal string, because TOML integers have 64 bits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Quantity(pub u128);
+
+impl Serialize for Quantity {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(&self.0)
+    }
+}
+
 pub fn fields(values: &[Fr]) -> Vec<Field> {
     values.iter().copied().map(Field).collect()
 }
@@ -43,8 +53,7 @@ pub struct Resource {
     logic_ref: Field,
     label_ref: Field,
     value_ref: Field,
-    // TOML integers have 64 bits, so the quantity is a decimal string.
-    quantity: String,
+    quantity: Quantity,
     nonce: Field,
     nullifier_key_commitment: Field,
     is_ephemeral: bool,
@@ -57,7 +66,7 @@ impl From<&anoma_arm::resource::Resource> for Resource {
             logic_ref: Field(resource.logic_ref),
             label_ref: Field(resource.label_ref),
             value_ref: Field(resource.value_ref),
-            quantity: resource.quantity.to_string(),
+            quantity: Quantity(resource.quantity),
             nonce: Field(resource.nonce),
             nullifier_key_commitment: Field(resource.nullifier_key_commitment),
             is_ephemeral: resource.is_ephemeral,

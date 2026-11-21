@@ -40,18 +40,16 @@ pub fn wrap_keys(directory: &Path) -> anyhow::Result<Keys> {
 
 /// The logic ref of the trivial logic, which the token resources of the tests use.
 pub fn token_logic_ref() -> anyhow::Result<Fr> {
-    Ok(toolchain()
-        .verification_key(&Logic::trivial().circuit)
-        .context("write the key of the trivial logic")?
-        .hash)
+    toolchain()
+        .key_hash(&Logic::trivial().circuit)
+        .context("write the key of the trivial logic")
 }
 
 /// The logic ref of the intent logic.
 pub fn intent_logic_ref() -> anyhow::Result<Fr> {
-    Ok(toolchain()
-        .verification_key(anoma_intent::CIRCUIT)
-        .context("write the key of the intent logic")?
-        .hash)
+    toolchain()
+        .key_hash(anoma_intent::CIRCUIT)
+        .context("write the key of the intent logic")
 }
 
 /// A persistent token resource of the kind `label`, owned by `owner`. The action that creates it sets its nonce.
@@ -73,35 +71,24 @@ pub fn token(
     })
 }
 
-/// Where a consumed resource is: in the commitment tree with the root, or nowhere for an ephemeral resource.
-pub enum Membership {
-    Tree { path: MembershipPath, root: Fr },
-    Ephemeral,
-}
-
 /// An action that consumes `consumed` and creates `created` with the nonce that the nullifier of `consumed` gives.
+/// `path` is the membership path of a persistent `consumed`.
 pub fn action(
     consumed: Resource,
     consumed_logic: Logic,
     nullifier_key: NullifierKey,
-    membership: Membership,
+    path: Option<MembershipPath>,
     created: Resource,
     created_logic: Logic,
     rcv: u64,
 ) -> anyhow::Result<ActionWitness> {
     let nullifier = consumed.nullifier(nullifier_key)?;
-    let (path, commitment_tree_root) = match membership {
-        Membership::Tree { path, root } => (path, root),
-        // The root of the empty tree is a historical root of every AnomaVerifier.
-        Membership::Ephemeral => (MembershipPath::default(), Fr::from(0u64)),
-    };
     Ok(ActionWitness {
         consumed,
         consumed_logic,
         consumed_app_data: AppData::default(),
         nullifier_key,
         path,
-        commitment_tree_root,
         created: Resource {
             nonce: created_nonce(nullifier),
             ..created
@@ -115,21 +102,13 @@ pub fn action(
 /// An action that creates `created` from an ephemeral resource of its kind and quantity, which anyone can make with
 /// the trivial logic.
 pub fn mint(created: Resource, rcv: u64) -> anyhow::Result<ActionWitness> {
-    let source = NullifierKey(Fr::from(rcv));
-    let consumed = Resource {
-        nullifier_key_commitment: source.commitment(),
-        is_ephemeral: true,
-        ..created
-    };
-    action(
-        consumed,
-        Logic::trivial(),
-        source,
-        Membership::Ephemeral,
+    Ok(ActionWitness::from_ephemeral(
         created,
+        created.quantity,
+        NullifierKey(Fr::from(rcv)),
         Logic::trivial(),
-        rcv,
-    )
+        Scalar::from(rcv),
+    )?)
 }
 
 /// The proved action of a party that gives up `token` for an intent with `terms`. The intent carries the payload for
@@ -137,7 +116,7 @@ pub fn mint(created: Resource, rcv: u64) -> anyhow::Result<ActionWitness> {
 pub fn propose(
     token: Resource,
     owner: NullifierKey,
-    membership: Membership,
+    path: MembershipPath,
     terms: Terms,
     receiver: Receiver,
     solver: &Receiver,
@@ -162,7 +141,7 @@ pub fn propose(
         token,
         Logic::trivial(),
         owner,
-        membership,
+        Some(path),
         intent,
         anoma_intent::created_logic()?,
         seed,

@@ -3,21 +3,10 @@ use anoma_arm::{Fr, Point};
 use anoma_discovery::{ReceiverKeys, app_data};
 use anoma_intent_pool::IntentPool;
 use anoma_prover::action::{LogicProof, ProvedAction};
-use anoma_prover::toolchain::{Proof, VerificationKey};
+use anoma_prover::toolchain::Proof;
 
 /// An action whose created resource has the app data, with empty proofs: the pool checks no proof.
 fn action(created_app_data: AppData) -> ProvedAction {
-    let empty_proof = Proof {
-        fields: Vec::new(),
-        public_inputs: Vec::new(),
-    };
-    let empty_logic_proof = LogicProof {
-        verification_key: VerificationKey {
-            fields: Vec::new(),
-            hash: Fr::from(0u64),
-        },
-        proof: empty_proof.clone(),
-    };
     ProvedAction {
         action: Action {
             nullifier: Fr::from(1u64),
@@ -29,9 +18,9 @@ fn action(created_app_data: AppData) -> ProvedAction {
             commitment_tree_root: Fr::from(0u64),
         },
         delta: Point::default(),
-        compliance_proof: empty_proof,
-        consumed_logic_proof: empty_logic_proof.clone(),
-        created_logic_proof: empty_logic_proof,
+        compliance_proof: Proof::default(),
+        consumed_logic_proof: LogicProof::default(),
+        created_logic_proof: LogicProof::default(),
     }
 }
 

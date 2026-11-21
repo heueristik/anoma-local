@@ -28,6 +28,8 @@ pub enum Error {
         circuit: String,
         source: toml::ser::Error,
     },
+    #[error("an action needs a membership path exactly when its consumed resource is persistent")]
+    Membership,
     #[error("the membership path has {length} siblings, more than the largest path length {max}")]
     PathTooLong { length: usize, max: usize },
     #[error("{circuit} has {count} public inputs, expected {expected}")]

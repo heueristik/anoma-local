@@ -27,14 +27,14 @@ impl Target {
 }
 
 /// The verification key of a circuit, as the fields that a recursive verifier takes, and its hash.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct VerificationKey {
     pub fields: Vec<Fr>,
     pub hash: Fr,
 }
 
 /// A proof, as the fields that a recursive verifier takes, and its public inputs.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Proof {
     pub fields: Vec<Fr>,
     pub public_inputs: Vec<Fr>,
@@ -83,7 +83,12 @@ impl Toolchain {
         })
     }
 
-    /// Solves the circuit for the inputs, proves it, and checks the proof.
+    /// The hash of the verification key of a circuit, which is the logic ref of a resource logic.
+    pub fn key_hash(&self, circuit: &str) -> Result<Fr, Error> {
+        Ok(self.verification_key(circuit)?.hash)
+    }
+
+    /// Solves the circuit for the inputs, proves it, and checks the proof. A failed run keeps its files.
     pub fn prove(
         &self,
         circuit: &str,
@@ -136,10 +141,15 @@ impl Toolchain {
                 .arg("-o")
                 .arg(&directory),
         )?;
-        Ok(Proof {
+        let proof = Proof {
             fields: read_fields(&directory.join("proof"))?,
             public_inputs: read_fields(&directory.join("public_inputs"))?,
-        })
+        };
+        std::fs::remove_dir_all(&directory).map_err(|source| Error::Io {
+            path: directory,
+            source,
+        })?;
+        Ok(proof)
     }
 
     /// The directory with the `vk` and `vk_hash` files of a circuit, which this writes on the first call.

@@ -5,7 +5,7 @@ use anoma_arm::delta::unit_delta;
 use anoma_arm::digest::{Action, AppData};
 use anoma_arm::field::to_hex;
 use anoma_arm::kind::Kind;
-use anoma_arm::resource::{NullifierKey, Resource, action_tree_root};
+use anoma_arm::resource::{NullifierKey, Resource, action_tree_root, created_nonce};
 use anoma_arm::{Fr, Point, Scalar};
 
 use crate::inputs::{self, Field};
@@ -40,18 +40,49 @@ pub struct ActionWitness {
     pub consumed_logic: Logic,
     pub consumed_app_data: AppData,
     pub nullifier_key: NullifierKey,
-    /// The path of the consumed resource to `commitment_tree_root`; the compliance unit skips it for an ephemeral
-    /// resource.
-    pub path: MembershipPath,
-    pub commitment_tree_root: Fr,
+    /// The path of a persistent consumed resource in the commitment tree, or `None` for an ephemeral one.
+    pub path: Option<MembershipPath>,
     pub created: Resource,
     pub created_logic: Logic,
     pub created_app_data: AppData,
     pub rcv: Scalar,
 }
 
+impl ActionWitness {
+    /// The action that creates `created` from an ephemeral resource of its kind with `consumed_quantity`, which
+    /// `source` opens. It sets the nonce of `created`, and both resources have the logic of the kind.
+    pub fn from_ephemeral(
+        created: Resource,
+        consumed_quantity: u128,
+        source: NullifierKey,
+        logic: Logic,
+        rcv: Scalar,
+    ) -> Result<Self, Error> {
+        let consumed = Resource {
+            quantity: consumed_quantity,
+            nullifier_key_commitment: source.commitment(),
+            is_ephemeral: true,
+            ..created
+        };
+        Ok(Self {
+            created: Resource {
+                nonce: created_nonce(consumed.nullifier(source)?),
+                ..created
+            },
+            consumed,
+            consumed_logic: logic.clone(),
+            consumed_app_data: AppData::default(),
+            nullifier_key: source,
+            path: None,
+            created_logic: logic,
+            created_app_data: AppData::default(),
+            rcv,
+        })
+    }
+}
+
 /// The proof of a resource logic and the verification key whose hash is the logic ref.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LogicProof {
     pub verification_key: VerificationKey,
     pub proof: Proof,
@@ -70,6 +101,13 @@ pub struct ProvedAction {
 /// Proves an action, as a partial transaction of one action.
 pub fn prove(toolchain: &Toolchain, witness: &ActionWitness) -> Result<PartialTransaction, Error> {
     let nullifier = witness.consumed.nullifier(witness.nullifier_key)?;
+    // The root of the empty tree is a root of every AnomaVerifier, and the compliance unit skips it for an ephemeral
+    // resource.
+    let (path, commitment_tree_root) = match (&witness.path, witness.consumed.is_ephemeral) {
+        (Some(path), false) => (path, path.root(witness.consumed.commitment())),
+        (None, true) => (&MembershipPath::default(), Fr::from(0u64)),
+        _ => return Err(Error::Membership),
+    };
     let commitment = witness.created.commitment();
     let action = Action {
         nullifier,
@@ -78,7 +116,7 @@ pub fn prove(toolchain: &Toolchain, witness: &ActionWitness) -> Result<PartialTr
         commitment,
         created_logic_ref: witness.created.logic_ref,
         created_app_data: witness.created_app_data.clone(),
-        commitment_tree_root: witness.commitment_tree_root,
+        commitment_tree_root,
     };
 
     let consumed_kind = Kind::new(witness.consumed.logic_ref, witness.consumed.label_ref);
@@ -103,7 +141,7 @@ pub fn prove(toolchain: &Toolchain, witness: &ActionWitness) -> Result<PartialTr
             delta_y,
             consumed: (&witness.consumed).into(),
             nullifier_key: Field(witness.nullifier_key.0),
-            path: (&witness.path).try_into()?,
+            path: path.try_into()?,
             consumed_kind: consumed_kind.into(),
             created: (&witness.created).into(),
             created_kind: created_kind.into(),

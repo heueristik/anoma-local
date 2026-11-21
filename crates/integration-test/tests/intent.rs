@@ -7,12 +7,13 @@
 use std::path::PathBuf;
 
 use anoma_arm::Fr;
+use anoma_arm::Scalar;
 use anoma_arm::belt::Belt;
 use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
 use anoma_bindings::conversion::word;
 use anoma_integration_test::chain::Chain;
 use anoma_integration_test::fixtures::{
-    self, Membership, action as build_action, intent_logic_ref, token, token_logic_ref,
+    self, action as build_action, intent_logic_ref, token, token_logic_ref,
 };
 use anoma_intent::Terms;
 use anoma_prover::action::{ActionWitness, Logic};
@@ -158,10 +159,7 @@ impl Intent {
             token,
             Logic::trivial(),
             owner,
-            Membership::Tree {
-                path: belt.path(index)?,
-                root: belt.root(),
-            },
+            Some(belt.path(index)?),
             intent,
             anoma_intent::created_logic()?,
             rcv,
@@ -190,7 +188,7 @@ impl Intent {
             *intent,
             logic,
             self.nullifier_key,
-            Membership::Ephemeral,
+            None,
             created,
             Logic::trivial(),
             rcv,
@@ -200,22 +198,13 @@ impl Intent {
 
 /// The action of the solver that creates `created` from an ephemeral resource of its kind with quantity 0.
 fn take_surplus(created: Resource, rcv: u64) -> anyhow::Result<ActionWitness> {
-    let source = NullifierKey(Fr::from(rcv));
-    let consumed = Resource {
-        quantity: 0,
-        nullifier_key_commitment: source.commitment(),
-        is_ephemeral: true,
-        ..created
-    };
-    build_action(
-        consumed,
-        Logic::trivial(),
-        source,
-        Membership::Ephemeral,
+    Ok(ActionWitness::from_ephemeral(
         created,
+        0,
+        NullifierKey(Fr::from(rcv)),
         Logic::trivial(),
-        rcv,
-    )
+        Scalar::from(rcv),
+    )?)
 }
 
 /// Executes a transaction, then checks its nullifiers and the root of the belt with its commitments.

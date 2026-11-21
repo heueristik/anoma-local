@@ -9,7 +9,7 @@ use anoma_arm::Fr;
 use anoma_arm::hash::poseidon2_hash;
 use anoma_arm::resource::{NullifierKey, Resource};
 use anoma_prover::action::Logic;
-use anoma_prover::inputs::{self, Field};
+use anoma_prover::inputs::{self, Field, Quantity};
 use serde::Serialize;
 
 /// The circuit of the intent logic.
@@ -91,7 +91,7 @@ pub fn consumed_logic(
         terms: TermsInput {
             want_logic_ref: Field(terms.want_logic_ref),
             want_label_ref: Field(terms.want_label_ref),
-            min_quantity: terms.min_quantity.to_string(),
+            min_quantity: Quantity(terms.min_quantity),
             receiver_nullifier_key_commitment: Field(terms.receiver_nullifier_key_commitment),
         },
         created: created.into(),
@@ -115,7 +115,6 @@ struct Witness {
 struct TermsInput {
     want_logic_ref: Field,
     want_label_ref: Field,
-    // TOML integers have 64 bits, so the quantity is a decimal string.
-    min_quantity: String,
+    min_quantity: Quantity,
     receiver_nullifier_key_commitment: Field,
 }
