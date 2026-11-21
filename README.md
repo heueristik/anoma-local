@@ -13,7 +13,7 @@ The terms are in [CONTEXT.md](CONTEXT.md).
 | `crates/arm` | The resource machine outside the circuits: resources, kinds, deltas, the commitment tree and the action digest |
 | `crates/groth16-wrap` | The Groth16 wrap of a bb proof through a Go library on gnark, and the wrapper of the root proof |
 | `crates/prover` | Proves actions and transactions through the `CircuitProver`, `RootProofWrapper` and `ResourceLogic` traits, and the circuit prover on nargo and bb |
-| `crates/discovery` | The `Discovery` trait, and the scheme of Anoma Galileo: ECIES on secp256k1 and trial decryption |
+| `crates/discovery` | The `Discovery` trait, and its scheme with ECIES on Grumpkin and Poseidon2 and trial decryption |
 | `crates/intent` | The intent resource, its logic, and the payload for the solver |
 | `crates/token` | The token resource and its logic, whose owner or issuer signs with a P-256 key |
 | `crates/intent-pool` | The `IntentPool` trait, and a pool in memory |
@@ -31,7 +31,7 @@ The resource machine in `crates/arm`, the provers of actions and transactions, t
 | `RootProofWrapper` | `anoma_prover::root_proof_wrapper` | `Groth16Wrapper` in `crates/groth16-wrap` | Turns the root proof into the proof that the AnomaVerifier checks |
 | `ResourceLogic` | `anoma_prover::resource_logic` | `TrivialLogic`, `IntentLogic` in `crates/intent`, `TokenLogic` in `crates/token` | Names the circuit of a logic, and makes its private inputs from the action of its resource |
 | `Signer` | `anoma_token` | Each P-256 key that signs messages with ECDSA over SHA-256, such as `p256::ecdsa::SigningKey` | Signs the action tree root for the owner or the issuer of a token |
-| `Discovery` | `anoma_discovery` | `EciesDiscovery` | Makes a created resource discoverable for its receiver, and finds the resources of a receiver |
+| `Discovery` | `anoma_discovery` | `GrumpkinDiscovery` | Makes a created resource discoverable for its receiver, and finds the resources of a receiver |
 | `IntentPool` | `anoma_intent_pool` | `MemoryIntentPool` | Holds the intents for the solvers until the chain executes their fills |
 | `Matcher` | `anoma_solver::matching` | `CpSatMatcher` | Chooses the intents that balance together |
 
@@ -41,7 +41,7 @@ Each implementation must keep these constraints:
 - A root proof wrapper needs its own verifier contract, which the AnomaVerifier gets at its deployment.
 - A resource logic is a Noir circuit whose public inputs are the tag, `is_consumed`, the action tree root and the app data hash. A new logic is a new circuit with its own logic ref.
 - A signer signs with ECDSA over SHA-256, as keriox and the secure element of a device do. The token logic accepts only the low s, so `TokenLogic` normalizes the signature.
-- The address of a discovery scheme is in the intent payload, so a new scheme also changes the payloads.
+- A discovery scheme encrypts BN254 field elements, as the plaintext of a resource and the intent payload are field elements. Its address is in the intent payload, so a new scheme also changes the payloads.
 - The methods of an intent pool are async, so that a pool on a network can wait for its answers. The pool checks no proof; the solver does.
 
 The chain is the ABI of the AnomaVerifier. `crates/bindings` and the `Chain` of the end-to-end tests are its client.
