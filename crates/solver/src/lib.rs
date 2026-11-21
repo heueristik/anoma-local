@@ -1,7 +1,8 @@
 //! A solver of intents. It finds the intents whose payloads are for its keys, checks their payloads and proofs, chooses
-//! with CP-SAT the most intents that balance together, and proves the actions that fill them and that take the
+//! with its matcher the intents that balance together, and proves the actions that fill them and that take the
 //! surplus. The result is a balanced partial transaction, which the caller proves and sends.
 
+pub mod cp_sat;
 pub mod matching;
 
 use std::collections::BTreeSet;
@@ -18,12 +19,12 @@ use anoma_prover::circuit_prover::{CircuitError, CircuitProver};
 use ark_ff::UniformRand;
 use rand_core::OsRng;
 
-use crate::matching::{KindRef, Order};
+use crate::matching::{KindRef, Matcher, Order};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error(transparent)]
-    Matching(#[from] matching::Error),
+    #[error("the matcher fails: {0}")]
+    Matcher(Box<dyn std::error::Error + Send + Sync>),
     #[error(transparent)]
     Circuit(#[from] CircuitError),
     #[error(transparent)]
@@ -32,11 +33,12 @@ pub enum Error {
     Discovery(Box<dyn std::error::Error + Send + Sync>),
 }
 
-/// A solver: its discovery scheme and its secret keys in it, the owner of its surplus, and the logic of the tokens that
-/// it trades.
-pub struct Solver<D: Discovery> {
+/// A solver: its discovery scheme and its secret keys in it, its matcher, the owner of its surplus, and the logic of the
+/// tokens that it trades.
+pub struct Solver<D: Discovery, M> {
     pub discovery: D,
     pub secret_keys: D::SecretKeys,
+    pub matcher: M,
     pub owner: NullifierKey,
     /// The solver skips intents of tokens with other logics.
     pub token_logic: Logic,
@@ -56,7 +58,7 @@ struct Candidate<Id, A> {
     partial: PartialTransaction,
 }
 
-impl<D: Discovery> Solver<D> {
+impl<D: Discovery, M: Matcher> Solver<D, M> {
     /// Fills the most of the intents that balance together. Its actions of ephemeral resources show
     /// `commitment_tree_root`, a recent root of the chain. Returns `None` if it fills none.
     pub fn solve<Id: Copy>(
@@ -110,7 +112,10 @@ impl<D: Discovery> Solver<D> {
             .iter()
             .map(|candidate| order(&candidate.payload))
             .collect();
-        let matching = matching::solve(&orders)?;
+        let matching = self
+            .matcher
+            .choose(&orders)
+            .map_err(|error| Error::Matcher(Box::new(error)))?;
         if matching.chosen.is_empty() {
             return Ok(None);
         }

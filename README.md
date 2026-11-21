@@ -16,7 +16,7 @@ The terms are in [CONTEXT.md](CONTEXT.md).
 | `crates/discovery` | The port to a discovery scheme, and the scheme of Anoma Galileo: ECIES on secp256k1 and trial decryption |
 | `crates/intent` | The intent resource, the inputs of its logic, and the payload for the solver |
 | `crates/intent-pool` | The port to an intent pool, and a pool in memory |
-| `crates/solver` | A solver that matches intents with the CP-SAT solver of OR-Tools |
+| `crates/solver` | A solver of intents, the port to a matcher, and a matcher with the CP-SAT solver of OR-Tools |
 | `crates/bindings` | The Rust bindings of the `AnomaVerifier` |
 | `crates/integration-test` | The fixtures and the anvil chain of the end-to-end tests |
 

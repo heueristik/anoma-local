@@ -38,5 +38,5 @@
 - **Payload**: the data that a solver needs to fill an intent: the intent and its nullifier key, the terms, the offer, the rcv sum and the address of the receiver. The creator encrypts it to the solver.
 - **Discovery**: how a receiver finds its resources. The creator encrypts payloads in the app data of a resource to the **address** of the receiver, its public keys. The receiver finds its resources with its secret keys. In the scheme of Anoma Galileo, the creator adds a discovery blob and the encrypted plaintext of the resource, and the receiver tries to decrypt every discovery blob.
 - **Intent pool**: a list of unbalanced partial transactions. The pool checks nothing. A solver finds the intents whose payloads are for its keys, and checks the payload and the actions of an intent before it fills it.
-- **Solver**: a party that finds intents by discovery, chooses with CP-SAT the most intents that balance together, and proves the actions that fill them.
+- **Solver**: a party that finds intents by discovery, chooses with a **matcher** the intents that balance together, and proves the actions that fill them. The CP-SAT matcher chooses the most intents.
 - **Surplus**: what is left of a kind after the solver fills the chosen intents. The solver creates it for itself from an ephemeral resource of quantity 0.

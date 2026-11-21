@@ -1,6 +1,6 @@
 [package]
 name = "anoma-solver"
-description = "A solver of intents: it matches intents with the CP-SAT solver of Google OR-Tools and proves the actions that fill them"
+description = "A solver of intents: it chooses intents with a matcher, CP-SAT of Google OR-Tools by default, and proves the actions that fill them"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }

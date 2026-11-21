@@ -17,6 +17,7 @@ use anoma_intent_pool::{IntentPool, MemoryIntentId, MemoryIntentPool, PooledInte
 use anoma_prover::action::{self, ActionWitness, Logic, ProvedAction};
 use anoma_prover::transaction;
 use anoma_solver::Solver;
+use anoma_solver::cp_sat::CpSatMatcher;
 use anyhow::Context;
 use tempfile::TempDir;
 
@@ -323,10 +324,11 @@ async fn ids(pool: &MemoryIntentPool) -> anyhow::Result<Vec<MemoryIntentId>> {
 }
 
 /// A solver that trades tokens of the trivial logic and keeps its surplus for `owner`.
-fn solver(owner: NullifierKey) -> Solver<EciesDiscovery> {
+fn solver(owner: NullifierKey) -> Solver<EciesDiscovery, CpSatMatcher> {
     Solver {
         discovery: EciesDiscovery,
         secret_keys: EciesSecretKeys::random(),
+        matcher: CpSatMatcher,
         owner,
         token_logic: Logic::trivial(),
     }
@@ -352,7 +354,7 @@ fn propose(
     owner: NullifierKey,
     (want_label, want_quantity): (u64, u128),
     receiver: &EciesSecretKeys,
-    solver: &Solver<EciesDiscovery>,
+    solver: &Solver<EciesDiscovery, CpSatMatcher>,
     seed: u64,
 ) -> anyhow::Result<Vec<ProvedAction>> {
     fixtures::propose(
