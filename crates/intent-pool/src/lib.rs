@@ -53,7 +53,7 @@ impl IntentPool {
         self.intents.get(&id).map(Vec::as_slice)
     }
 
-    /// Removes an intent, for a solver that composes it into a transaction.
+    /// Removes an intent, once the chain executes a transaction that fills it.
     pub fn take(&mut self, id: IntentId) -> Option<Vec<ProvedAction>> {
         self.intents.remove(&id)
     }

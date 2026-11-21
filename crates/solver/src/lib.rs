@@ -37,7 +37,8 @@ pub struct Solver {
     pub token_logic: Logic,
 }
 
-/// A balanced partial transaction, and the intents of the pool that it fills.
+/// A balanced partial transaction, and the intents of the pool that it fills, which the caller takes from the pool once
+/// the chain executes the transaction.
 pub struct Solution {
     pub partial: PartialTransaction,
     pub filled: Vec<IntentId>,
@@ -51,12 +52,12 @@ struct Candidate {
 }
 
 impl Solver {
-    /// Fills the most intents of the pool that balance together, and takes them from the pool. Returns `None` if it
-    /// fills none.
+    /// Fills the most intents of the pool that balance together, and leaves them in the pool. Returns `None` if it fills
+    /// none.
     pub fn solve(
         &self,
         toolchain: &Toolchain,
-        pool: &mut IntentPool,
+        pool: &IntentPool,
     ) -> Result<Option<Solution>, Error> {
         let logic_keys = [
             toolchain.verification_key(&self.token_logic.circuit)?,
@@ -123,7 +124,6 @@ impl Solver {
         let mut filled = Vec::new();
         for (index, candidate) in candidates.into_iter().enumerate() {
             if matching.chosen.contains(&index) {
-                pool.take(candidate.id);
                 partial = partial.compose(candidate.partial);
                 filled.push(candidate.id);
             }

@@ -80,14 +80,22 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
     )?);
 
     let solution = solver
-        .solve(toolchain, &mut pool)?
+        .solve(toolchain, &pool)?
         .context("the solver fills no intent")?;
     assert_eq!(solution.filled, [alice_intent, bob_intent]);
-    assert_eq!(pool.len(), 1);
-    assert!(pool.get(carol_intent).is_some());
+    assert_eq!(
+        pool.len(),
+        3,
+        "the filled intents stay in the pool until the chain executes the settlement"
+    );
 
     let settlement = transaction::prove(toolchain, &solution.partial, &keys)?;
     chain.execute(&settlement).await?;
+    for &id in &solution.filled {
+        pool.take(id);
+    }
+    assert_eq!(pool.len(), 1);
+    assert!(pool.get(carol_intent).is_some());
     let label = |label: u64| Fr::from(label);
     assert_eq!(
         received(&settlement.actions, &alice_keys),
@@ -148,7 +156,7 @@ fn solve_fills_a_copied_intent_once() -> anyhow::Result<()> {
     );
 
     let solution = solver
-        .solve(fixtures::toolchain(), &mut pool)?
+        .solve(fixtures::toolchain(), &pool)?
         .context("the solver fills no intent")?;
     assert_eq!(solution.filled, [alice_intent, bob_intent]);
     Ok(())
@@ -205,7 +213,7 @@ fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
     pool.submit(dave_actions);
 
     let solution = solver
-        .solve(fixtures::toolchain(), &mut pool)?
+        .solve(fixtures::toolchain(), &pool)?
         .context("the solver fills no intent")?;
     assert_eq!(solution.filled, [alice_intent, bob_intent]);
     Ok(())
