@@ -168,6 +168,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "anoma-intent"
+version = "0.1.0"
+dependencies = [
+ "anoma-arm",
+ "anoma-discovery",
+ "anoma-prover",
+ "ark-ec",
+ "ark-ff",
+ "serde",
+ "thiserror",
+ "toml",
+]
+
+[[package]]
 name = "anoma-prover"
 version = "0.1.0"
 dependencies = [

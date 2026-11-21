@@ -1,0 +1,9 @@
+[package]
+name = "intent_logic"
+type = "bin"
+authors = ["Heueristik"]
+compiler_version = ">=1.0.0"
+
+[dependencies]
+arm = { path = "../arm" }
+poseidon = { tag = "v0.3.0", git = "https://github.com/noir-lang/poseidon" }

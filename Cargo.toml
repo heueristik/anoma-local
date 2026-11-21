@@ -13,7 +13,9 @@ homepage = "https://anoma.net/"
 acir_field = "1.0.0"
 aes-gcm = "0.10.3"
 anoma-arm = { path = "crates/arm" }
+anoma-discovery = { path = "crates/discovery" }
 anoma-groth16-wrap = { path = "crates/groth16-wrap" }
+anoma-prover = { path = "crates/prover" }
 anyhow = "1.0.104"
 ark-bn254 = { version = "0.6.0", default-features = false, features = ["scalar_field"] }
 ark-ec = "0.6.0"

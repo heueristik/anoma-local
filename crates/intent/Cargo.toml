@@ -1,0 +1,18 @@
+[package]
+name = "anoma-intent"
+description = "The intent resource of the Anoma local circuits: its terms, and the inputs of its logic"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+
+[dependencies]
+anoma-arm = { workspace = true }
+anoma-discovery = { workspace = true }
+anoma-prover = { workspace = true }
+ark-ec = { workspace = true }
+ark-ff = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
