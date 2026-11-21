@@ -14,8 +14,10 @@ acir_field = "1.0.0"
 aes-gcm = "0.10.3"
 alloy = { version = "2.6.1", features = ["full", "node-bindings"] }
 anoma-arm = { path = "crates/arm" }
+anoma-bindings = { path = "crates/bindings" }
 anoma-discovery = { path = "crates/discovery" }
 anoma-groth16-wrap = { path = "crates/groth16-wrap" }
+anoma-intent = { path = "crates/intent" }
 anoma-prover = { path = "crates/prover" }
 anyhow = "1.0.104"
 ark-bn254 = { version = "0.6.0", default-features = false, features = ["scalar_field"] }
@@ -28,7 +30,9 @@ hex = "0.4.3"
 k256 = { version = "0.13.4", features = ["serde"] }
 rand_core = { version = "0.6.4", features = ["getrandom"] }
 serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 sha2 = "0.11.1"
 tempfile = "3.27.0"
 thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros"] }
 toml = "1.2.1"

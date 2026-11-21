@@ -1034,6 +1034,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "anoma-integration-test"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "anoma-arm",
+ "anoma-bindings",
+ "anoma-discovery",
+ "anoma-groth16-wrap",
+ "anoma-intent",
+ "anoma-prover",
+ "anyhow",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "anoma-intent"
 version = "0.1.0"
 dependencies = [
