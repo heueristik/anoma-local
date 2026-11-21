@@ -1,6 +1,7 @@
 //! The token resource: its label ref is the key hash of its issuer, and its value ref the key hash of its owner. The
-//! action that consumes a token of a quantity carries a P-256 signature over its action tree root: of the owner for a
-//! persistent token, and of the issuer for an ephemeral token, whose consumption mints the quantity.
+//! action that consumes a token of a quantity carries a P-256 signature over its action tree root, with SHA-256 as
+//! keriox signs data: of the owner for a persistent token, and of the issuer for an ephemeral token, whose consumption
+//! mints the quantity.
 
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -13,22 +14,22 @@ use anoma_prover::Error;
 use anoma_prover::circuit_prover::CircuitInputs;
 use anoma_prover::inputs::{self, Field, circuit_inputs};
 use anoma_prover::resource_logic::{LogicContext, ResourceLogic};
-use p256::ecdsa::signature::Keypair;
-use p256::ecdsa::signature::hazmat::PrehashSigner;
+use p256::ecdsa::signature::{self, Keypair};
 use p256::ecdsa::{Signature, VerifyingKey};
 use serde::Serialize;
 
 /// The circuit of the token logic.
 pub const CIRCUIT: &str = "token_logic";
 
-/// A P-256 key that signs digests: a key in memory, or a key in a secure element of the device.
+/// A P-256 key that signs messages with ECDSA over SHA-256, as keriox does: a key in memory, or a key in a secure
+/// element of the device.
 pub trait Signer:
-    PrehashSigner<Signature> + Keypair<VerifyingKey = VerifyingKey> + Debug + Send + Sync
+    signature::Signer<Signature> + Keypair<VerifyingKey = VerifyingKey> + Debug + Send + Sync
 {
 }
 
 impl<T> Signer for T where
-    T: PrehashSigner<Signature> + Keypair<VerifyingKey = VerifyingKey> + Debug + Send + Sync
+    T: signature::Signer<Signature> + Keypair<VerifyingKey = VerifyingKey> + Debug + Send + Sync
 {
 }
 
@@ -61,8 +62,8 @@ impl ResourceLogic for TokenLogic {
         };
         let (signer, signature) = match (&self.signer, context.is_consumed) {
             (Some(signer), true) => {
-                let signature: Signature = signer
-                    .sign_prehash(&to_bytes(context.action_tree_root))
+                let signature = signer
+                    .try_sign(&to_bytes(context.action_tree_root))
                     .map_err(|source| Error::LogicInputs {
                         circuit: CIRCUIT.to_string(),
                         source: Box::new(source),

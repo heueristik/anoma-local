@@ -30,7 +30,7 @@ The resource machine in `crates/arm`, the provers of actions and transactions, t
 | `CircuitProver` | `anoma_prover::circuit_prover` | `CliProver`, which runs nargo and bb | Gives the verification key of a circuit, proves it, and verifies proofs |
 | `RootProofWrapper` | `anoma_prover::root_proof_wrapper` | `Groth16Wrapper` in `crates/groth16-wrap` | Turns the root proof into the proof that the AnomaVerifier checks |
 | `ResourceLogic` | `anoma_prover::resource_logic` | `TrivialLogic`, `IntentLogic` in `crates/intent`, `TokenLogic` in `crates/token` | Names the circuit of a logic, and makes its private inputs from the action of its resource |
-| `Signer` | `anoma_token` | Each P-256 key that signs digests, such as `p256::ecdsa::SigningKey` | Signs the action tree root for the owner or the issuer of a token |
+| `Signer` | `anoma_token` | Each P-256 key that signs messages with ECDSA over SHA-256, such as `p256::ecdsa::SigningKey` | Signs the action tree root for the owner or the issuer of a token |
 | `Discovery` | `anoma_discovery` | `EciesDiscovery` | Makes a created resource discoverable for its receiver, and finds the resources of a receiver |
 | `IntentPool` | `anoma_intent_pool` | `MemoryIntentPool` | Holds the intents for the solvers until the chain executes their fills |
 | `Matcher` | `anoma_solver::matching` | `CpSatMatcher` | Chooses the intents that balance together |
@@ -40,7 +40,7 @@ Each implementation must keep these constraints:
 - A circuit prover gives bb 6.0.0 UltraHonk proofs and keys: the step circuits verify the leaf proofs, and the hash of the key of a logic is its logic ref.
 - A root proof wrapper needs its own verifier contract, which the AnomaVerifier gets at its deployment.
 - A resource logic is a Noir circuit whose public inputs are the tag, `is_consumed`, the action tree root and the app data hash. A new logic is a new circuit with its own logic ref.
-- A signer signs a 32-byte digest, as a secure element of a device does. The token logic accepts only the low s, so `TokenLogic` normalizes the signature.
+- A signer signs with ECDSA over SHA-256, as keriox and the secure element of a device do. The token logic accepts only the low s, so `TokenLogic` normalizes the signature.
 - The address of a discovery scheme is in the intent payload, so a new scheme also changes the payloads.
 - The methods of an intent pool are async, so that a pool on a network can wait for its answers. The pool checks no proof; the solver does.
 

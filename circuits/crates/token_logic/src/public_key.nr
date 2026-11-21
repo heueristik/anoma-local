@@ -14,9 +14,11 @@ impl PublicKey {
         hash(hash::PUBLIC_KEY, [x_high, x_low, y_high, y_low])
     }
 
-    /// Whether `signature` is an ECDSA signature of the key, with a low s, over the 32 big-endian bytes of `message`.
+    /// Whether `signature` is an ECDSA signature of the key, with a low s, over the SHA-256 hash of the 32 big-endian
+    /// bytes of `message`, as keriox signs data.
     pub fn verify(self, signature: [u8; 64], message: Field) -> bool {
-        std::ecdsa_secp256r1::verify_signature(self.x, self.y, signature, message.to_be_bytes())
+        let digest = sha256::digest(message.to_be_bytes::<32>());
+        std::ecdsa_secp256r1::verify_signature(self.x, self.y, signature, digest)
     }
 }
 
