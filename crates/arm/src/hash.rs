@@ -20,6 +20,9 @@ pub enum Domain {
     BeltNode = 9,
     Terms = 10,
     PublicKey = 11,
+    SharedKey = 12,
+    Keystream = 13,
+    CiphertextTag = 14,
 }
 
 /// Hashes the domain and the inputs with Poseidon2.

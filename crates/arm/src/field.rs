@@ -32,6 +32,28 @@ pub fn to_hex(value: Fr) -> String {
     format!("0x{}", hex::encode(to_bytes(value)))
 }
 
+/// The value of a field element below 2^128, as a quantity holds it.
+pub fn to_u128(value: Fr) -> Option<u128> {
+    let bytes = to_bytes(value);
+    let (high, low) = bytes.split_at(16);
+    (high == [0; 16]).then(|| u128::from_be_bytes(low.try_into().expect("a half has 16 bytes")))
+}
+
+/// The Grumpkin scalar of the low and high 128 bits that `scalar_limbs` gives.
+pub fn scalar_from_limbs(low: Fr, high: Fr) -> Option<Scalar> {
+    let mut bytes = [0; 32];
+    bytes[..16].copy_from_slice(&to_u128(high)?.to_be_bytes());
+    bytes[16..].copy_from_slice(&to_u128(low)?.to_be_bytes());
+    from_bytes(bytes).ok()
+}
+
+/// The Grumpkin point of the coordinates, if it is on the curve and not the point at infinity, which is (0, 0).
+pub fn point_from_coordinates(x: Fr, y: Fr) -> Option<Point> {
+    let point = Point::new_unchecked(x, y);
+    // Grumpkin has a cofactor of 1, so each point on the curve is in the group of prime order.
+    (!point.is_zero() && point.is_on_curve()).then_some(point)
+}
+
 /// The low and high 128 bits of a Grumpkin scalar, as Noir's `EmbeddedCurveScalar` holds them.
 pub fn scalar_limbs(scalar: Scalar) -> (Fr, Fr) {
     let bytes = scalar.into_bigint().to_bytes_be();

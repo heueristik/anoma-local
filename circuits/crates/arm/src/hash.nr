@@ -11,6 +11,9 @@ pub global ACTION_TREE: Field = 8;
 pub global MMB_NODE: Field = 9;
 pub global TERMS: Field = 10;
 pub global PUBLIC_KEY: Field = 11;
+pub global SHARED_KEY: Field = 12;
+pub global KEYSTREAM: Field = 13;
+pub global CIPHERTEXT_TAG: Field = 14;
 
 /// Hashes the inputs with Poseidon2 after a domain tag, so that hashes for different purposes never share an input.
 pub fn hash<let N: u32>(domain: Field, inputs: [Field; N]) -> Field {
