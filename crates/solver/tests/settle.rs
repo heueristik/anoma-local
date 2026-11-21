@@ -332,6 +332,7 @@ fn solver(owner: NullifierKey) -> Solver<EciesDiscovery, CpSatMatcher> {
         secret_keys: EciesSecretKeys::random(),
         matcher: CpSatMatcher,
         owner,
+        owner_value_ref: Fr::from(0u64),
         token_logic: Arc::new(TrivialLogic),
     }
 }

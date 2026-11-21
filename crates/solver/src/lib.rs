@@ -42,6 +42,8 @@ pub struct Solver<D: Discovery, M> {
     pub secret_keys: D::SecretKeys,
     pub matcher: M,
     pub owner: NullifierKey,
+    /// The value ref of the surplus tokens; the token logic takes it as the key hash of the owner.
+    pub owner_value_ref: Fr,
     /// The solver skips intents of tokens with other logics.
     pub token_logic: Arc<dyn ResourceLogic>,
 }
@@ -180,7 +182,7 @@ impl<D: Discovery, M: Matcher> Solver<D, M> {
         let created = Resource {
             logic_ref: kind.logic_ref,
             label_ref: kind.label_ref,
-            value_ref: Fr::from(0u64),
+            value_ref: self.owner_value_ref,
             quantity,
             nonce: Fr::from(0u64),
             nullifier_key_commitment: self.owner.commitment(),
