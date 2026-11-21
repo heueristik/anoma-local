@@ -1,0 +1,22 @@
+[package]
+name = "anoma-token"
+description = "The token resource of the Anoma local circuits: its logic, whose owner or issuer signs with a P-256 key"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+
+[features]
+# Runs the tests that prove the token logic, which need nargo, bb and the compiled circuits.
+slow-tests = []
+
+[dependencies]
+anoma-arm = { workspace = true }
+anoma-prover = { workspace = true }
+p256 = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+anoma-integration-test = { workspace = true }
+anyhow = { workspace = true }

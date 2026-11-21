@@ -107,6 +107,11 @@ fn check_consumed_fails_on_a_tag_of_another_token() {
     );
 }
 
+#[test]
+fn public_key_hash_matches_the_rust_crate() {
+    assert_eq(OWNER.hash(), 0x16c77995e1a58f0bece092eba36efa37d5639b78b99c28828f29ba4e0b09ef00);
+}
+
 global NULLIFIER_KEY: Field = 42;
 
 /// The root that the signatures of the test keys sign.

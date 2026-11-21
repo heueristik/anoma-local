@@ -19,6 +19,7 @@ pub enum Domain {
     ActionTree = 8,
     BeltNode = 9,
     Terms = 10,
+    PublicKey = 11,
 }
 
 /// Hashes the domain and the inputs with Poseidon2.

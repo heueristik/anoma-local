@@ -1108,6 +1108,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "anoma-token"
+version = "0.1.0"
+dependencies = [
+ "anoma-arm",
+ "anoma-integration-test",
+ "anoma-prover",
+ "anyhow",
+ "p256",
+ "serde",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"

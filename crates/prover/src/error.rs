@@ -30,6 +30,11 @@ pub enum Error {
         logic_ref: String,
         key_hash: String,
     },
+    #[error("{circuit} cannot make its private inputs: {source}")]
+    LogicInputs {
+        circuit: String,
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
     #[error(
         "the logic proof of the logic ref {logic_ref} does not carry a verification key that the verifier knows"
     )]
