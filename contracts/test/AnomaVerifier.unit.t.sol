@@ -74,7 +74,10 @@ contract AnomaVerifierTest is Test {
         ) % 2 ** 253;
 
         IAnomaVerifier.Transaction memory transaction = _prove(_list(action));
-        vm.expectCall(address(_groth16), abi.encodeCall(IGroth16Verifier.verifyProof, (transaction.proof, [digest])));
+        vm.expectCall(
+            address(_groth16),
+            abi.encodeCall(IGroth16Verifier.verifyProof, (transaction.proof, [uint256(_bind(bytes32(digest)))]))
+        );
         _verifier.execute(transaction);
     }
 
@@ -85,20 +88,43 @@ contract AnomaVerifierTest is Test {
         assertEq(action.commitmentTreeRoot, bytes32(0), "the empty commitment tree has the root zero");
 
         // The value of `extend` in the Noir library of the circuits for this action.
-        uint256 digest = 0x10545fff186a4bd171fe33842768c98e12133b06c13ee14b99182ef580ef78bf;
+        bytes32 digest = 0x10545fff186a4bd171fe33842768c98e12133b06c13ee14b99182ef580ef78bf;
         IAnomaVerifier.Transaction memory transaction = _prove(_list(action));
-        vm.expectCall(address(_groth16), abi.encodeCall(IGroth16Verifier.verifyProof, (transaction.proof, [digest])));
+        vm.expectCall(
+            address(_groth16),
+            abi.encodeCall(IGroth16Verifier.verifyProof, (transaction.proof, [uint256(_bind(digest))]))
+        );
         _verifier.execute(transaction);
     }
 
     function test_execute_chains_the_action_digest_in_the_order_of_the_actions() public {
         IAnomaVerifier.Action memory first = _action(_tag("first nullifier"), _tag("first commitment"));
         IAnomaVerifier.Action memory second = _action(_tag("second nullifier"), _tag("second commitment"));
-        uint256 digest = uint256(_extend(_extend(bytes32(0), first), second));
+        bytes32 digest = _extend(_extend(bytes32(0), first), second);
 
         IAnomaVerifier.Transaction memory transaction = _prove(_list(first, second));
-        vm.expectCall(address(_groth16), abi.encodeCall(IGroth16Verifier.verifyProof, (transaction.proof, [digest])));
+        vm.expectCall(
+            address(_groth16),
+            abi.encodeCall(IGroth16Verifier.verifyProof, (transaction.proof, [uint256(_bind(digest))]))
+        );
         _verifier.execute(transaction);
+    }
+
+    function test_execute_reverts_on_a_proof_for_another_chain() public {
+        IAnomaVerifier.Transaction memory transaction = _prove(_list(_action(_tag("n"), _tag("c"))));
+
+        vm.chainId(block.chainid + 1);
+        vm.expectRevert(Groth16VerifierMock.ProofInvalid.selector);
+        _verifier.execute(transaction);
+    }
+
+    function test_execute_reverts_on_a_proof_for_another_verifier() public {
+        IAnomaVerifier.Transaction memory transaction = _prove(_list(_action(_tag("n"), _tag("c"))));
+        AnomaVerifier other = new AnomaVerifier(address(_groth16));
+        assertEq(other.latestCommitmentTreeRoot(), _emptyRoot, "the premise is that both verifiers have the same root");
+
+        vm.expectRevert(Groth16VerifierMock.ProofInvalid.selector);
+        other.execute(transaction);
     }
 
     function test_execute_reverts_on_a_proof_for_other_actions() public {
@@ -274,17 +300,22 @@ contract AnomaVerifierTest is Test {
         action.commitmentTreeRoot = _emptyRoot;
     }
 
-    /// @dev Returns a transaction whose proof the mock verifier accepts for its action digest.
+    /// @dev Returns a transaction whose proof the mock verifier accepts for its action digest, bound to `_verifier`.
     function _prove(IAnomaVerifier.Action[] memory actions)
         internal
-        pure
+        view
         returns (IAnomaVerifier.Transaction memory transaction)
     {
         bytes32 digest = bytes32(0);
         for (uint256 i = 0; i < actions.length; ++i) {
             digest = _extend(digest, actions[i]);
         }
-        transaction = IAnomaVerifier.Transaction({actions: actions, proof: abi.encode(digest)});
+        transaction = IAnomaVerifier.Transaction({actions: actions, proof: abi.encode(_bind(digest))});
+    }
+
+    /// @dev The action digest bound to the chain and to `_verifier`, written apart from the contract's library.
+    function _bind(bytes32 digest) internal view returns (bytes32 bound) {
+        bound = _low253Bits(sha256(abi.encode(block.chainid, address(_verifier), digest)));
     }
 
     /// @dev The action digest, written apart from the contract's library.

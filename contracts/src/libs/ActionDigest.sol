@@ -8,7 +8,8 @@ import {IAnomaVerifier} from "../interfaces/IAnomaVerifier.sol";
 /// @title ActionDigest
 /// @author Heueristik, 2026
 /// @notice The digest that binds the proof of a transaction to its actions. It starts at zero, and each action extends
-/// it in the order of the actions, as the step circuits of the final circuit do.
+/// it in the order of the actions, as the step circuits of the final circuit do. The root circuit then binds it to one
+/// chain and one AnomaVerifier.
 /// @custom:security-contact security@anoma.foundation
 library ActionDigest {
     /// @notice Keeps the low 253 bits of a hash, so that the result is smaller than the BN254 scalar field modulus.
@@ -36,6 +37,16 @@ library ActionDigest {
                 )
             )
         );
+    }
+
+    /// @notice Binds an action digest to one chain and one AnomaVerifier, so that the proof of a transaction verifies
+    /// on one AnomaVerifier only.
+    /// @param digest The action digest of the transaction.
+    /// @param chainId The chain ID.
+    /// @param verifier The address of the AnomaVerifier.
+    /// @return bound The low 253 bits of the SHA-256 hash of the ABI encoding of `chainId`, `verifier` and `digest`.
+    function bind(bytes32 digest, uint256 chainId, address verifier) internal pure returns (bytes32 bound) {
+        bound = _low253Bits(sha256(abi.encode(chainId, verifier, digest)));
     }
 
     /// @notice Hashes the app data of a resource, as its resource logic does.

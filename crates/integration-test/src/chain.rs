@@ -9,6 +9,7 @@ use alloy::primitives::{Address, Bytes};
 use alloy::providers::{DynProvider, Provider, ProviderBuilder};
 use alloy::rpc::types::{TransactionReceipt, TransactionRequest};
 use alloy::signers::local::PrivateKeySigner;
+use anoma_arm::digest::Deployment;
 use anoma_bindings::conversion;
 use anoma_bindings::generated::anoma_verifier::AnomaVerifier::{self, AnomaVerifierInstance};
 use anoma_groth16_wrap::{Keys, solidity_verifier};
@@ -30,6 +31,8 @@ const BYTECODE_SETTINGS: [&str; 7] = [
 pub struct Chain {
     _anvil: AnvilInstance,
     pub verifier: AnomaVerifierInstance<DynProvider>,
+    /// The chain ID and the address of the verifier, to which the proofs of its transactions are bound.
+    pub deployment: Deployment,
 }
 
 impl Chain {
@@ -55,12 +58,18 @@ impl Chain {
         let groth16_verifier: Address = receipt
             .contract_address
             .context("the deployment of the Groth16 verifier has no contract address")?;
+        let chain_id = provider.get_chain_id().await?;
         let verifier = AnomaVerifier::deploy(provider, groth16_verifier)
             .await
             .context("deploy the AnomaVerifier")?;
+        let deployment = Deployment {
+            chain_id,
+            verifier: verifier.address().into_array(),
+        };
         Ok(Self {
             _anvil: anvil,
             verifier,
+            deployment,
         })
     }
 

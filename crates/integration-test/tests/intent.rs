@@ -38,7 +38,7 @@ async fn execute_settles_the_intent_example_after_several_composition_steps() ->
     execute(
         &chain,
         &mut belt,
-        &transaction::prove(toolchain, &mint, &keys)?,
+        &transaction::prove(toolchain, &mint, &chain.deployment, &keys)?,
     )
     .await?;
 
@@ -74,7 +74,7 @@ async fn execute_settles_the_intent_example_after_several_composition_steps() ->
         )?);
     assert!(composed.is_balanced());
 
-    let settlement = transaction::prove(toolchain, &composed, &keys)?;
+    let settlement = transaction::prove(toolchain, &composed, &chain.deployment, &keys)?;
     execute(&chain, &mut belt, &settlement).await?;
     // Alice computes the resource that fills her intent from her terms, with no payload from Sally.
     let alice_fill = alice_intent

@@ -2,7 +2,7 @@
 
 use anoma_arm::belt::{Belt, node_hash};
 use anoma_arm::delta::unit_delta;
-use anoma_arm::digest::{ActionInstance, AppData, Blob, DeletionCriterion, extend};
+use anoma_arm::digest::{ActionInstance, AppData, Blob, DeletionCriterion, Deployment, extend};
 use anoma_arm::field::{from_bytes, scalar_limbs, to_bytes, to_hex};
 use anoma_arm::hash::poseidon2_hash;
 use anoma_arm::resource::{NullifierKey, Resource, action_tree_root, created_nonce};
@@ -97,6 +97,21 @@ fn scalar_limbs_match_noir() {
     assert_eq!(
         to_hex(hi),
         format!("0x{:0>64}", "30644e72e131a029b85045b68181585d")
+    );
+}
+
+#[test]
+fn bind_matches_the_contract_and_noir() {
+    let mut verifier = [0; 20];
+    verifier[19] = 2;
+    let deployment = Deployment {
+        chain_id: 1,
+        verifier,
+    };
+
+    assert_eq!(
+        deployment.bind(Fr::from(3u64)),
+        fr("0x1701f34c80e1ef7f8125e5d4d2d7e19b509e25d26e462d5308b5abb95b64783e")
     );
 }
 

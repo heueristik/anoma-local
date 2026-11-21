@@ -258,6 +258,8 @@ pub(crate) struct Root {
     pub last: StepState,
     pub last_is_first_step: bool,
     pub rcv_total: Scalar,
+    pub chain_id: Field,
+    pub verifier: Field,
 }
 
 /// The x and y coordinates of a point.

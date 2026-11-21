@@ -45,7 +45,12 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
         minted = minted.compose(action::prove(toolchain, mint)?);
     }
     chain
-        .execute(&transaction::prove(toolchain, &minted, &keys)?)
+        .execute(&transaction::prove(
+            toolchain,
+            &minted,
+            &chain.deployment,
+            &keys,
+        )?)
         .await?;
     let belt = belt(&mints);
 
@@ -98,7 +103,7 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
         "no action shows whether its consumed resource is ephemeral"
     );
 
-    let settlement = transaction::prove(toolchain, &solution.partial, &keys)?;
+    let settlement = transaction::prove(toolchain, &solution.partial, &chain.deployment, &keys)?;
     chain.execute(&settlement).await?;
     for &id in &solution.filled {
         pool.take(id);

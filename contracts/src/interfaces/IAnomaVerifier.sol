@@ -15,7 +15,8 @@ interface IAnomaVerifier {
 
     /// @notice A transaction: its actions and the proof of its compliance units, its resource logics and its balance.
     /// @param actions The actions, in the order in which the final circuit chains their action digest.
-    /// @param proof The Groth16 proof of the final circuit, whose public input is the action digest of `actions`.
+    /// @param proof The Groth16 proof of the final circuit, whose public input is the action digest of `actions`, bound
+    /// to the chain ID and the address of the AnomaVerifier.
     struct Transaction {
         Action[] actions;
         bytes proof;
@@ -64,7 +65,7 @@ interface IAnomaVerifier {
     }
 
     /// @notice Emitted when a transaction is executed.
-    /// @param actionDigest The action digest of the transaction, which is the public input of its proof.
+    /// @param actionDigest The action digest of the transaction.
     event TransactionExecuted(bytes32 indexed actionDigest);
 
     /// @notice Emitted when an action is executed.
@@ -110,8 +111,8 @@ interface IAnomaVerifier {
     /// @param blob The blob.
     event ApplicationPayload(bytes32 indexed tag, uint256 index, bytes blob);
 
-    /// @notice Adds the nullifiers, verifies the proof against the action digest, appends the commitments to the
-    /// commitment tree, and then makes the forwarder calls.
+    /// @notice Adds the nullifiers, verifies the proof against the action digest bound to this chain and this contract,
+    /// appends the commitments to the commitment tree, and then makes the forwarder calls.
     /// @param transaction The transaction.
     function execute(Transaction calldata transaction) external;
 

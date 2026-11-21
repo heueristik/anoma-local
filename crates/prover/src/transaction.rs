@@ -2,9 +2,9 @@
 
 use std::path::Path;
 
-use anoma_arm::digest::Action;
+use anoma_arm::digest::{Action, Deployment};
 use anoma_arm::field::{to_bytes, to_hex};
-use anoma_arm::{Point, Scalar};
+use anoma_arm::{Fr, Point, Scalar};
 use anoma_groth16_wrap::{Groth16Proof, Keys, single_party_setup};
 use ark_ec::{AffineRepr, CurveGroup};
 
@@ -56,10 +56,12 @@ pub struct Transaction {
     pub proof: Groth16Proof,
 }
 
-/// Proves a balanced partial transaction: one step proof for each action, the root proof, and its Groth16 wrap.
+/// Proves a balanced partial transaction for the AnomaVerifier `deployment`: one step proof for each action, the root
+/// proof, and its Groth16 wrap.
 pub fn prove(
     toolchain: &Toolchain,
     partial: &PartialTransaction,
+    deployment: &Deployment,
     keys: &Keys,
 ) -> Result<Transaction, Error> {
     let (first, rest) = partial.actions.split_first().ok_or(Error::Empty)?;
@@ -108,6 +110,8 @@ pub fn prove(
             last: StepState::from_public_inputs(last_circuit, &last.public_inputs)?,
             last_is_first_step: last_circuit == FIRST_STEP,
             rcv_total: partial.rcv_total.into(),
+            chain_id: Field(Fr::from(deployment.chain_id)),
+            verifier: Field(deployment.verifier_field()),
         },
         Target::Step,
     )?;

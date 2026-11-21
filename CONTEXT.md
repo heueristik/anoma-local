@@ -23,7 +23,7 @@
 - **Step proof**: a non-ZK UltraHonk proof of `first_step` or `next_step`. It verifies the leaf proofs of one action and, for `next_step`, the previous step proof.
 - **Root proof**: the proof of `root`. It verifies the last step proof and checks that the transaction is balanced.
 - **Groth16 wrap**: the gnark circuit that verifies the root proof. Its Groth16 proof is the one proof that the contract checks.
-- **Action digest**: the hash chain over the actions of a transaction. The step circuits compute it, and the contract computes it again from the transaction.
+- **Action digest**: the hash chain over the actions of a transaction. The step circuits compute it, and the contract computes it again from the transaction. The root proof binds it to the chain ID and the address of one AnomaVerifier, so that the proof verifies on that AnomaVerifier only.
 
 ## Commitment tree
 

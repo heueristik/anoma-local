@@ -5,14 +5,20 @@
 
 mod common;
 
-use anoma_arm::digest::action_digest;
+use anoma_arm::digest::{Deployment, action_digest};
 use anoma_arm::field::to_bytes;
 use anoma_prover::{Error, action, transaction};
 use anyhow::Context;
 
+/// An AnomaVerifier at the address 0x0101…01 on chain 1.
+const DEPLOYMENT: Deployment = Deployment {
+    chain_id: 1,
+    verifier: [1; 20],
+};
+
 #[test]
-fn prove_gives_a_groth16_proof_of_the_action_digest_of_a_composed_transaction() -> anyhow::Result<()>
-{
+fn prove_gives_a_groth16_proof_of_the_bound_action_digest_of_a_composed_transaction()
+-> anyhow::Result<()> {
     let toolchain = common::toolchain();
     let keys = transaction::single_party_wrap_keys(toolchain, &common::wrap_keys_directory())
         .context("set up the Groth16 keys")?;
@@ -25,7 +31,7 @@ fn prove_gives_a_groth16_proof_of_the_action_digest_of_a_composed_transaction() 
     );
     let partial = first.compose(second);
 
-    let transaction = transaction::prove(toolchain, &partial, &keys)?;
+    let transaction = transaction::prove(toolchain, &partial, &DEPLOYMENT, &keys)?;
 
     anoma_groth16_wrap::verify(&keys, &transaction.proof).context("verify the Groth16 proof")?;
     let instances: Vec<_> = transaction
@@ -35,7 +41,7 @@ fn prove_gives_a_groth16_proof_of_the_action_digest_of_a_composed_transaction() 
         .collect();
     assert_eq!(
         transaction.proof.public_inputs,
-        [to_bytes(action_digest(&instances))]
+        [to_bytes(DEPLOYMENT.bind(action_digest(&instances)))]
     );
     Ok(())
 }
@@ -46,7 +52,7 @@ fn prove_errors_on_an_unbalanced_transaction() -> anyhow::Result<()> {
     let partial = action::prove(toolchain, &common::ephemeral_action(1, 5, 3)?)?;
     let keys = anoma_groth16_wrap::Keys::new(common::wrap_keys_directory());
 
-    let result = transaction::prove(toolchain, &partial, &keys);
+    let result = transaction::prove(toolchain, &partial, &DEPLOYMENT, &keys);
 
     assert!(matches!(result, Err(Error::Unbalanced)), "got {result:?}");
     Ok(())

@@ -25,8 +25,8 @@ The terms are in [CONTEXT.md](CONTEXT.md).
 1. For each action, its party proves the compliance circuit and the logics of the consumed and the created resource. These leaf proofs are ZK UltraHonk proofs.
 2. A partial transaction is a list of proved actions and the sum of their rcv values. Partial transactions compose.
 3. `first_step` verifies the leaf proofs of the first action. Each `next_step` verifies the previous step proof and the leaf proofs of one more action. Each step adds the action to the action digest and its delta to the sum of the deltas.
-4. `root` verifies the last step proof and checks that the transaction is balanced.
-5. The gnark circuit wraps the root proof into a Groth16 proof. The contract checks it against the action digest of the transaction.
+4. `root` verifies the last step proof, checks that the transaction is balanced, and binds the action digest to the chain ID and the address of the AnomaVerifier.
+5. The gnark circuit wraps the root proof into a Groth16 proof. The contract checks it against the bound action digest of the transaction.
 
 ## Requirements
 

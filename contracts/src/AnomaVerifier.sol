@@ -73,7 +73,8 @@ contract AnomaVerifier is IAnomaVerifier, ReentrancyGuardTransient {
             actionDigest = ActionDigest.extend({digest: actionDigest, action: action});
         }
 
-        IGroth16Verifier(GROTH16_VERIFIER).verifyProof({proof: transaction.proof, input: [uint256(actionDigest)]});
+        bytes32 bound = ActionDigest.bind({digest: actionDigest, chainId: block.chainid, verifier: address(this)});
+        IGroth16Verifier(GROTH16_VERIFIER).verifyProof({proof: transaction.proof, input: [uint256(bound)]});
 
         _addCommitmentTreeRoot(_commitmentTree.append(commitments));
 

@@ -18,7 +18,7 @@ pub struct ActionInstance {
 
 /// Extends the action digest with an action, as the contract does: the low 253 bits of the SHA-256 hash of the digest and the fields of the action, each as 32 big-endian bytes.
 pub fn extend(digest: Field, action: ActionInstance) -> Field {
-    let fields = [
+    let bytes: [u8; ACTION_BYTES] = be_bytes([
         digest,
         action.nullifier,
         action.consumed_logic_ref,
@@ -27,15 +27,27 @@ pub fn extend(digest: Field, action: ActionInstance) -> Field {
         action.created_logic_ref,
         action.created_app_data_hash,
         action.commitment_tree_root,
-    ];
-    let mut bytes = [0; ACTION_BYTES];
-    for i in 0..8 {
+    ]);
+    low_253_bits(sha256::digest(bytes))
+}
+
+/// Binds the action digest to one chain and one AnomaVerifier, as the contract does: the low 253 bits of the SHA-256 hash of the chain ID, the address of the verifier and the digest, each as 32 big-endian bytes.
+pub fn bind(chain_id: Field, verifier: Field, digest: Field) -> Field {
+    let bytes: [u8; 96] = be_bytes([chain_id, verifier, digest]);
+    low_253_bits(sha256::digest(bytes))
+}
+
+/// The fields, each as 32 big-endian bytes, one after the other.
+fn be_bytes<let N: u32, let M: u32>(fields: [Field; N]) -> [u8; M] {
+    assert_eq(M, 32 * N, "the byte array does not hold 32 bytes for each field");
+    let mut bytes = [0; M];
+    for i in 0..N {
         let field_bytes: [u8; 32] = fields[i].to_be_bytes();
         for j in 0..32 {
             bytes[32 * i + j] = field_bytes[j];
         }
     }
-    low_253_bits(sha256::digest(bytes))
+    bytes
 }
 
 /// Keeps the low 253 bits of a hash, so that the result is a BN254 field element.
@@ -74,6 +86,12 @@ fn extend_hashes_the_digest_and_the_action_fields_in_order() {
 #[test]
 fn empty_app_data_hash_is_the_hash_of_four_zero_counts() {
     assert_eq(EMPTY_APP_DATA_HASH, low_253_bits(sha256::digest([0; 16])));
+}
+
+#[test]
+fn bind_matches_the_contract() {
+    // The value of `ActionDigest.bind` for the digest 3, the chain ID 1 and the verifier at the address 2.
+    assert_eq(bind(1, 2, 3), 0x1701f34c80e1ef7f8125e5d4d2d7e19b509e25d26e462d5308b5abb95b64783e);
 }
 
 #[test]
