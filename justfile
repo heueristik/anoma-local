@@ -156,6 +156,10 @@ crates-test-slow *args: circuits-keys
 crates-prove-times: circuits-keys
     NARGO={{ nargo }} BB={{ bb }} cargo bench -p anoma-integration-test --features slow-tests --bench prove_times
 
+# Print the gas of a wrap, a transfer and an unwrap on anvil with the Osaka hardfork as a Markdown table
+crates-execution-gas: circuits-keys
+    NARGO={{ nargo }} BB={{ bb }} cargo bench -p anoma-integration-test --features slow-tests --bench execution_gas
+
 # Lint the crates for both feature sets
 crates-lint:
     cargo clippy --workspace --all-targets --no-deps -- -Dwarnings

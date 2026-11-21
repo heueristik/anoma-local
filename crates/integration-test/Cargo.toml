@@ -9,8 +9,8 @@ homepage = { workspace = true }
 publish = false
 
 [features]
-# Runs the tests that prove transactions and execute them on anvil, and the benchmark of the proof times. They take
-# minutes and many gigabytes of memory.
+# Runs the tests that prove transactions and execute them on anvil, and the benchmarks of the proof times and of the
+# gas. They take minutes and many gigabytes of memory.
 slow-tests = []
 
 [dependencies]
@@ -33,5 +33,10 @@ tokio = { workspace = true }
 
 [[bench]]
 name = "prove_times"
+harness = false
+required-features = ["slow-tests"]
+
+[[bench]]
+name = "execution_gas"
 harness = false
 required-features = ["slow-tests"]
