@@ -80,13 +80,22 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
     )?);
 
     let solution = solver
-        .solve(toolchain, &pool)?
+        .solve(toolchain, &pool, belt.root())?
         .context("the solver fills no intent")?;
     assert_eq!(solution.filled, [alice_intent, bob_intent]);
     assert_eq!(
         pool.len(),
         3,
         "the filled intents stay in the pool until the chain executes the settlement"
+    );
+
+    assert!(
+        solution
+            .partial
+            .actions
+            .iter()
+            .all(|proved| proved.action.commitment_tree_root == belt.root()),
+        "no action shows whether its consumed resource is ephemeral"
     );
 
     let settlement = transaction::prove(toolchain, &solution.partial, &keys)?;
@@ -156,7 +165,7 @@ fn solve_fills_a_copied_intent_once() -> anyhow::Result<()> {
     );
 
     let solution = solver
-        .solve(fixtures::toolchain(), &pool)?
+        .solve(fixtures::toolchain(), &pool, belt.root())?
         .context("the solver fills no intent")?;
     assert_eq!(solution.filled, [alice_intent, bob_intent]);
     Ok(())
@@ -213,7 +222,7 @@ fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
     pool.submit(dave_actions);
 
     let solution = solver
-        .solve(fixtures::toolchain(), &pool)?
+        .solve(fixtures::toolchain(), &pool, belt.root())?
         .context("the solver fills no intent")?;
     assert_eq!(solution.filled, [alice_intent, bob_intent]);
     Ok(())

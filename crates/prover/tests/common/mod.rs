@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use anoma_arm::belt::Belt;
 use anoma_arm::resource::NullifierKey;
 use anoma_arm::{Fr, Scalar};
 use anoma_integration_test::fixtures::token;
@@ -26,6 +27,7 @@ pub fn ephemeral_action(
         consumed_quantity,
         owner,
         Logic::trivial(),
+        Belt::default().root(),
         Scalar::from(4000 + seed),
     )?)
 }

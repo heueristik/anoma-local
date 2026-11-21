@@ -28,7 +28,9 @@ pub enum Error {
         circuit: String,
         source: toml::ser::Error,
     },
-    #[error("an action needs a membership path exactly when its consumed resource is persistent")]
+    #[error(
+        "an action needs a membership path for a persistent consumed resource, and a root for an ephemeral one"
+    )]
     Membership,
     #[error("the membership path has {length} siblings, more than the largest path length {max}")]
     PathTooLong { length: usize, max: usize },

@@ -52,12 +52,13 @@ struct Candidate {
 }
 
 impl Solver {
-    /// Fills the most intents of the pool that balance together, and leaves them in the pool. Returns `None` if it fills
-    /// none.
+    /// Fills the most intents of the pool that balance together, and leaves them in the pool. Its actions of ephemeral
+    /// resources show `commitment_tree_root`, a recent root of the chain. Returns `None` if it fills none.
     pub fn solve(
         &self,
         toolchain: &Toolchain,
         pool: &IntentPool,
+        commitment_tree_root: Fr,
     ) -> Result<Option<Solution>, Error> {
         let logic_keys = [
             toolchain.verification_key(&self.token_logic.circuit)?,
@@ -108,10 +109,14 @@ impl Solver {
 
         let mut witnesses = Vec::new();
         for &index in &matching.chosen {
-            witnesses.push(self.fill(&candidates[index].payload, intent_logic_ref)?);
+            witnesses.push(self.fill(
+                &candidates[index].payload,
+                intent_logic_ref,
+                commitment_tree_root,
+            )?);
         }
         for (&kind, &quantity) in &matching.surplus {
-            witnesses.push(self.take_surplus(kind, quantity)?);
+            witnesses.push(self.take_surplus(kind, quantity, commitment_tree_root)?);
         }
         let mut partial = PartialTransaction {
             actions: Vec::new(),
@@ -132,12 +137,18 @@ impl Solver {
     }
 
     /// The action that consumes the intent and creates the resource of its terms for its receiver.
-    fn fill(&self, payload: &Payload, intent_logic_ref: Fr) -> Result<ActionWitness, Error> {
+    fn fill(
+        &self,
+        payload: &Payload,
+        intent_logic_ref: Fr,
+        commitment_tree_root: Fr,
+    ) -> Result<ActionWitness, Error> {
         let mut witness = anoma_intent::fill(
             &payload.intent(intent_logic_ref),
             payload.nullifier_key,
             &payload.terms,
             self.token_logic.clone(),
+            commitment_tree_root,
             Scalar::rand(&mut OsRng),
         )?;
         witness.created_app_data =
@@ -146,7 +157,12 @@ impl Solver {
     }
 
     /// The action that creates the surplus of a kind for the solver from an ephemeral resource of quantity 0.
-    fn take_surplus(&self, kind: KindRef, quantity: u128) -> Result<ActionWitness, Error> {
+    fn take_surplus(
+        &self,
+        kind: KindRef,
+        quantity: u128,
+        commitment_tree_root: Fr,
+    ) -> Result<ActionWitness, Error> {
         let created = Resource {
             logic_ref: kind.logic_ref,
             label_ref: kind.label_ref,
@@ -162,6 +178,7 @@ impl Solver {
             0,
             NullifierKey(Fr::rand(&mut OsRng)),
             self.token_logic.clone(),
+            commitment_tree_root,
             Scalar::rand(&mut OsRng),
         )?;
         witness.created_app_data =

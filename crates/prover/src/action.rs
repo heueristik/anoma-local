@@ -33,6 +33,16 @@ impl Logic {
     }
 }
 
+/// How an action shows that its consumed resource exists.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Membership {
+    /// The path of a persistent consumed resource in the commitment tree.
+    Persistent(MembershipPath),
+    /// A historical root for an ephemeral consumed resource. The compliance unit does not check it, but the action
+    /// shows it, so a recent root hides that the resource is ephemeral.
+    Ephemeral { root: Fr },
+}
+
 /// The private data of an action: the consumed resource and what opens it, and the created resource.
 #[derive(Clone, Debug)]
 pub struct ActionWitness {
@@ -40,8 +50,7 @@ pub struct ActionWitness {
     pub consumed_logic: Logic,
     pub consumed_app_data: AppData,
     pub nullifier_key: NullifierKey,
-    /// The path of a persistent consumed resource in the commitment tree, or `None` for an ephemeral one.
-    pub path: Option<MembershipPath>,
+    pub membership: Membership,
     pub created: Resource,
     pub created_logic: Logic,
     pub created_app_data: AppData,
@@ -50,12 +59,14 @@ pub struct ActionWitness {
 
 impl ActionWitness {
     /// The action that creates `created` from an ephemeral resource of its kind with `consumed_quantity`, which
-    /// `source` opens. It sets the nonce of `created`, and both resources have the logic of the kind.
+    /// `source` opens, and shows the historical root `commitment_tree_root`. It sets the nonce of `created`, and both
+    /// resources have the logic of the kind.
     pub fn from_ephemeral(
         created: Resource,
         consumed_quantity: u128,
         source: NullifierKey,
         logic: Logic,
+        commitment_tree_root: Fr,
         rcv: Scalar,
     ) -> Result<Self, Error> {
         let consumed = Resource {
@@ -73,7 +84,9 @@ impl ActionWitness {
             consumed_logic: logic.clone(),
             consumed_app_data: AppData::default(),
             nullifier_key: source,
-            path: None,
+            membership: Membership::Ephemeral {
+                root: commitment_tree_root,
+            },
             created_logic: logic,
             created_app_data: AppData::default(),
             rcv,
@@ -167,11 +180,9 @@ impl ProvedAction {
 /// Proves an action, as a partial transaction of one action.
 pub fn prove(toolchain: &Toolchain, witness: &ActionWitness) -> Result<PartialTransaction, Error> {
     let nullifier = witness.consumed.nullifier(witness.nullifier_key)?;
-    // The root of the empty tree is a root of every AnomaVerifier, and the compliance unit skips it for an ephemeral
-    // resource.
-    let (path, commitment_tree_root) = match (&witness.path, witness.consumed.is_ephemeral) {
-        (Some(path), false) => (path, path.root(witness.consumed.commitment())),
-        (None, true) => (&MembershipPath::default(), Fr::from(0u64)),
+    let (path, commitment_tree_root) = match (&witness.membership, witness.consumed.is_ephemeral) {
+        (Membership::Persistent(path), false) => (path, path.root(witness.consumed.commitment())),
+        (Membership::Ephemeral { root }, true) => (&MembershipPath::default(), *root),
         _ => return Err(Error::Membership),
     };
     let commitment = witness.created.commitment();

@@ -29,7 +29,7 @@
 
 - **Merkle Mountain Belt**: the commitment tree, a list of perfect binary trees under one Poseidon2 root.
 - **Membership path**: the hashes from a commitment to a root. The compliance circuit takes every path at the maximum length of 67 hashes, so the length does not show the age of the resource.
-- **Historical root**: a root that the contract had at some time, from the root of the empty tree on. A membership path must lead to one.
+- **Historical root**: a root that the contract had at some time, from the root of the empty tree on. A membership path must lead to one. The action of an ephemeral resource shows a recent one, so that its root does not show that the resource is ephemeral.
 
 ## Intents and solvers
 

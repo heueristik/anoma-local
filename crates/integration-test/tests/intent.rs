@@ -14,7 +14,7 @@ use anoma_bindings::conversion::word;
 use anoma_integration_test::chain::Chain;
 use anoma_integration_test::fixtures::{self, action as build_action, intent_logic_ref, token};
 use anoma_intent::Terms;
-use anoma_prover::action::{ActionWitness, Logic};
+use anoma_prover::action::{ActionWitness, Logic, Membership};
 use anoma_prover::{Error, PartialTransaction, Transaction, action, transaction};
 use tempfile::TempDir;
 
@@ -52,12 +52,12 @@ async fn execute_settles_the_intent_example_after_several_composition_steps() ->
     assert!(!composed.is_balanced());
     let composed = composed.compose(action::prove(
         toolchain,
-        &alice_intent.fill(&alice_part.resource, 41)?,
+        &alice_intent.fill(&alice_part.resource, belt.root(), 41)?,
     )?);
     assert!(!composed.is_balanced());
     let composed = composed.compose(action::prove(
         toolchain,
-        &bob_intent.fill(&bob_part.resource, 42)?,
+        &bob_intent.fill(&bob_part.resource, belt.root(), 42)?,
     )?);
     assert!(
         !composed.is_balanced(),
@@ -66,11 +66,11 @@ async fn execute_settles_the_intent_example_after_several_composition_steps() ->
     let composed = composed
         .compose(action::prove(
             toolchain,
-            &take_surplus(token(APPLE, 1, sally, 15)?, 51)?,
+            &take_surplus(token(APPLE, 1, sally, 15)?, belt.root(), 51)?,
         )?)
         .compose(action::prove(
             toolchain,
-            &take_surplus(token(BANANA, 3, sally, 16)?, 52)?,
+            &take_surplus(token(BANANA, 3, sally, 16)?, belt.root(), 52)?,
         )?);
     assert!(composed.is_balanced());
 
@@ -100,7 +100,7 @@ fn prove_errors_on_a_fill_with_another_quantity_than_the_terms() -> anyhow::Resu
         Fr::from(7u64),
         Fr::from(8u64),
     );
-    let mut witness = intent.fill(&resource, 41)?;
+    let mut witness = intent.fill(&resource, Belt::default().root(), 41)?;
     witness.created.quantity += 1;
     witness.consumed_logic =
         anoma_intent::consumed_logic(&resource, intent.nullifier_key, &terms, &witness.created)?;
@@ -172,7 +172,7 @@ impl Intent {
             token,
             Logic::trivial(),
             owner,
-            Some(belt.path(index)?),
+            Membership::Persistent(belt.path(index)?),
             intent,
             anoma_intent::created_logic()?,
             rcv,
@@ -184,25 +184,29 @@ impl Intent {
         })
     }
 
-    /// The action of the solver that consumes this intent and creates the resource of its terms for the receiver.
-    fn fill(&self, intent: &Resource, rcv: u64) -> anyhow::Result<ActionWitness> {
+    /// The action of the solver that consumes this intent and creates the resource of its terms for the receiver. It
+    /// shows the historical root `root`.
+    fn fill(&self, intent: &Resource, root: Fr, rcv: u64) -> anyhow::Result<ActionWitness> {
         Ok(anoma_intent::fill(
             intent,
             self.nullifier_key,
             &self.terms()?,
             Logic::trivial(),
+            root,
             Scalar::from(rcv),
         )?)
     }
 }
 
-/// The action of the solver that creates `created` from an ephemeral resource of its kind with quantity 0.
-fn take_surplus(created: Resource, rcv: u64) -> anyhow::Result<ActionWitness> {
+/// The action of the solver that creates `created` from an ephemeral resource of its kind with quantity 0. It shows
+/// the historical root `root`.
+fn take_surplus(created: Resource, root: Fr, rcv: u64) -> anyhow::Result<ActionWitness> {
     Ok(ActionWitness::from_ephemeral(
         created,
         0,
         NullifierKey(Fr::from(rcv)),
         Logic::trivial(),
+        root,
         Scalar::from(rcv),
     )?)
 }

@@ -3,14 +3,14 @@
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use anoma_arm::belt::MembershipPath;
+use anoma_arm::belt::{Belt, MembershipPath};
 use anoma_arm::digest::AppData;
 use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
 use anoma_arm::{Fr, Scalar};
 use anoma_discovery::Receiver;
 use anoma_groth16_wrap::Keys;
 use anoma_intent::{Offer, Payload, Terms};
-use anoma_prover::action::{self, ActionWitness, Logic, ProvedAction};
+use anoma_prover::action::{self, ActionWitness, Logic, Membership, ProvedAction};
 use anoma_prover::toolchain::Toolchain;
 use anoma_prover::transaction;
 use anyhow::Context;
@@ -90,12 +90,11 @@ pub fn terms(
 }
 
 /// An action that consumes `consumed` and creates `created` with the nonce that the nullifier of `consumed` gives.
-/// `path` is the membership path of a persistent `consumed`.
 pub fn action(
     consumed: Resource,
     consumed_logic: Logic,
     nullifier_key: NullifierKey,
-    path: Option<MembershipPath>,
+    membership: Membership,
     created: Resource,
     created_logic: Logic,
     rcv: u64,
@@ -106,7 +105,7 @@ pub fn action(
         consumed_logic,
         consumed_app_data: AppData::default(),
         nullifier_key,
-        path,
+        membership,
         created: Resource {
             nonce: created_nonce(nullifier),
             ..created
@@ -117,14 +116,15 @@ pub fn action(
     })
 }
 
-/// An action that creates `created` from an ephemeral resource of its kind and quantity, which anyone can make with
-/// the trivial logic.
+/// An action on the empty commitment tree that creates `created` from an ephemeral resource of its kind and quantity,
+/// which anyone can make with the trivial logic.
 pub fn mint(created: Resource, rcv: u64) -> anyhow::Result<ActionWitness> {
     Ok(ActionWitness::from_ephemeral(
         created,
         created.quantity,
         NullifierKey(Fr::from(rcv)),
         Logic::trivial(),
+        Belt::default().root(),
         Scalar::from(rcv),
     )?)
 }
@@ -157,7 +157,7 @@ pub fn propose(
         token,
         Logic::trivial(),
         owner,
-        Some(path),
+        Membership::Persistent(path),
         payload.intent(intent_logic_ref()?),
         anoma_intent::created_logic()?,
         seed,

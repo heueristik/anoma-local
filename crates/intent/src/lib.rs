@@ -10,7 +10,7 @@ use anoma_arm::hash::{Domain, hash};
 use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
 use anoma_arm::{Fr, Scalar};
 use anoma_prover::Error;
-use anoma_prover::action::{ActionWitness, Logic};
+use anoma_prover::action::{ActionWitness, Logic, Membership};
 use anoma_prover::inputs::{self, Field, Quantity};
 use serde::Serialize;
 
@@ -80,12 +80,14 @@ impl Terms {
     }
 }
 
-/// The action that consumes `intent` and creates the resource of its terms with `created_logic`.
+/// The action that consumes `intent` and creates the resource of its terms with `created_logic`. It shows the
+/// historical root `commitment_tree_root`.
 pub fn fill(
     intent: &Resource,
     nullifier_key: NullifierKey,
     terms: &Terms,
     created_logic: Logic,
+    commitment_tree_root: Fr,
     rcv: Scalar,
 ) -> Result<ActionWitness, Error> {
     let created = terms.resource(intent.nullifier(nullifier_key)?);
@@ -94,7 +96,9 @@ pub fn fill(
         consumed_logic: consumed_logic(intent, nullifier_key, terms, &created)?,
         consumed_app_data: AppData::default(),
         nullifier_key,
-        path: None,
+        membership: Membership::Ephemeral {
+            root: commitment_tree_root,
+        },
         created,
         created_logic,
         created_app_data: AppData::default(),
