@@ -18,17 +18,22 @@ pub fn transaction(actions: &[Action], proof: &[u8]) -> IAnomaVerifier::Transact
 
 pub fn action(action: &Action) -> IAnomaVerifier::Action {
     IAnomaVerifier::Action {
-        consumed: resource_instance(
-            action.nullifier,
-            action.consumed_logic_ref,
-            &action.consumed_app_data,
-        ),
-        created: resource_instance(
-            action.commitment,
-            action.created_logic_ref,
-            &action.created_app_data,
-        ),
-        commitmentTreeRoot: word(action.commitment_tree_root),
+        resources: vec![
+            resource(
+                true,
+                action.nullifier,
+                action.consumed_logic_ref,
+                action.commitment_tree_root,
+                &action.consumed_app_data,
+            ),
+            resource(
+                false,
+                action.commitment,
+                action.created_logic_ref,
+                Fr::from(0u64),
+                &action.created_app_data,
+            ),
+        ],
     }
 }
 
@@ -37,14 +42,18 @@ pub fn word(value: Fr) -> B256 {
     B256::from(to_bytes(value))
 }
 
-fn resource_instance(
+fn resource(
+    is_consumed: bool,
     tag: Fr,
     logic_ref: Fr,
+    commitment_tree_root: Fr,
     app_data: &AppData,
-) -> IAnomaVerifier::ResourceInstance {
-    IAnomaVerifier::ResourceInstance {
+) -> IAnomaVerifier::Resource {
+    IAnomaVerifier::Resource {
+        isConsumed: is_consumed,
         tag: word(tag),
         logicRef: word(logic_ref),
+        commitmentTreeRoot: word(commitment_tree_root),
         appData: IAnomaVerifier::AppData {
             resourcePayload: blobs(&app_data.resource_payload),
             discoveryPayload: blobs(&app_data.discovery_payload),
