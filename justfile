@@ -253,11 +253,11 @@ crates-test *args:
 crates-test-slow *args: circuits-keys
     NARGO={{ nargo }} BB={{ bb }} cargo test --workspace --all-features {{ args }} -- --test-threads 1
 
-# Print the time of each proof of a wrap, a transfer and an unwrap as a Markdown table
+# Print the time of each proof of a wrap, a transfer, an unwrap, a transfer with change and a split into three as a Markdown table
 crates-prove-times: circuits-keys
     NARGO={{ nargo }} BB={{ bb }} cargo bench -p anoma-integration-test --features slow-tests --bench prove_times
 
-# Print the gas of a wrap, a transfer and an unwrap on anvil with the Osaka hardfork as a Markdown table
+# Print the gas of a wrap, a transfer, an unwrap, a transfer with change and a split into three on anvil with the Osaka hardfork as a Markdown table
 crates-execution-gas: circuits-keys
     NARGO={{ nargo }} BB={{ bb }} cargo bench -p anoma-integration-test --features slow-tests --bench execution_gas
 

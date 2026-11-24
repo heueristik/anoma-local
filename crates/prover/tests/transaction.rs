@@ -36,14 +36,9 @@ fn prove_gives_a_groth16_proof_of_the_bound_action_digest_of_a_composed_transact
     wrapper
         .verify(&transaction.proof)
         .context("verify the Groth16 proof")?;
-    let instances: Vec<_> = transaction
-        .actions
-        .iter()
-        .map(|action| action.instance())
-        .collect();
     assert_eq!(
         transaction.proof.public_inputs,
-        [DEPLOYMENT.bind(action_digest(&instances))]
+        [DEPLOYMENT.bind(action_digest(&transaction.actions))]
     );
     Ok(())
 }

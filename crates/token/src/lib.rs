@@ -55,15 +55,14 @@ impl ResourceLogic for TokenLogic {
 
     fn private_inputs(&self, context: &LogicContext) -> Result<CircuitInputs, Error> {
         // The logic checks nothing for a created token, but nargo needs a value for each private input.
-        let (token, nullifier_key) = if context.is_consumed {
-            (context.action.consumed, context.action.nullifier_key.0)
-        } else {
-            (Resource::default(), Fr::from(0u64))
+        let (token, nullifier_key) = match &context.witness().consumption {
+            Some(consumption) => (*context.resource(), consumption.nullifier_key.0),
+            None => (Resource::default(), Fr::from(0u64)),
         };
-        let (signer, signature) = match (&self.signer, context.is_consumed) {
+        let (signer, signature) = match (&self.signer, context.is_consumed()) {
             (Some(signer), true) => {
                 let signature = signer
-                    .try_sign(&to_bytes(context.action_tree_root))
+                    .try_sign(&to_bytes(context.action_tree_root()))
                     .map_err(|source| Error::LogicInputs {
                         circuit: CIRCUIT.to_string(),
                         source: Box::new(source),

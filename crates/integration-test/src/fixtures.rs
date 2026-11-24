@@ -3,14 +3,13 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 
-use anoma_arm::app_data::AppData;
 use anoma_arm::belt::{Belt, MembershipPath};
 use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
 use anoma_arm::{Fr, Scalar};
 use anoma_discovery::{Discovery, GrumpkinAddress, GrumpkinDiscovery};
 use anoma_groth16_wrap::Groth16Wrapper;
 use anoma_intent::{IntentLogic, Offer, Payload, Terms};
-use anoma_prover::action::{self, ActionWitness, Membership, ProvedAction};
+use anoma_prover::action::{self, ActionWitness, Membership, ProvedAction, ResourceWitness};
 use anoma_prover::circuit_prover::CircuitProver;
 use anoma_prover::cli_prover::CliProver;
 use anoma_prover::resource_logic::ResourceLogic;
@@ -138,21 +137,51 @@ pub fn action(
     created_logic: Arc<dyn ResourceLogic>,
     rcv: u64,
 ) -> anyhow::Result<ActionWitness> {
-    let nullifier = consumed.nullifier(nullifier_key)?;
-    Ok(ActionWitness {
+    split(
         consumed,
         consumed_logic,
-        consumed_app_data: AppData::default(),
         nullifier_key,
         membership,
-        created: Resource {
-            nonce: created_nonce(nullifier),
-            ..created
-        },
+        &[created],
         created_logic,
-        created_app_data: AppData::default(),
-        rcv: Scalar::from(rcv),
-    })
+        rcv,
+    )
+}
+
+/// An action that consumes `consumed` and creates each of `created`, in this order, with the nonces that the nullifier
+/// of `consumed` gives.
+pub fn split(
+    consumed: Resource,
+    consumed_logic: Arc<dyn ResourceLogic>,
+    nullifier_key: NullifierKey,
+    membership: Membership,
+    created: &[Resource],
+    created_logic: Arc<dyn ResourceLogic>,
+    rcv: u64,
+) -> anyhow::Result<ActionWitness> {
+    let created = created
+        .iter()
+        .map(|&resource| ResourceWitness::created(resource, Arc::clone(&created_logic)));
+    Ok(ActionWitness::new(
+        std::iter::once(ResourceWitness::consumed(
+            consumed,
+            consumed_logic,
+            nullifier_key,
+            membership,
+        ))
+        .chain(created)
+        .collect(),
+        Scalar::from(rcv),
+    )?)
+}
+
+/// The first created resource of an action, the token of a mint or a transfer.
+pub fn first_created(witness: &ActionWitness) -> anyhow::Result<Resource> {
+    witness
+        .created()
+        .next()
+        .map(|created| created.resource)
+        .context("the action creates no resource")
 }
 
 /// An action on the empty commitment tree that creates `created` from an ephemeral token of its kind and quantity, which
@@ -180,7 +209,8 @@ pub fn propose(
     seed: u64,
 ) -> anyhow::Result<Vec<ProvedAction>> {
     let payload = Payload {
-        nonce: created_nonce(token.nullifier(owner.nullifier_key)?),
+        // The intent is the first created resource of an action that consumes only `token`.
+        nonce: created_nonce(0, &[token.nullifier(owner.nullifier_key)?]),
         rand_seed: Fr::from(seed),
         nullifier_key: NullifierKey(Fr::from(seed)),
         terms,
@@ -201,6 +231,8 @@ pub fn propose(
         Arc::new(IntentLogic { terms }),
         seed,
     )?;
-    witness.created_app_data = GrumpkinDiscovery.app_data(solver, &payload.to_fields())?;
+    for created in witness.created_mut() {
+        created.app_data = GrumpkinDiscovery.app_data(solver, &payload.to_fields())?;
+    }
     Ok(action::prove(circuit_prover(), &witness)?.actions)
 }

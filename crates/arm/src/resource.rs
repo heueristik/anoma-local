@@ -104,7 +104,13 @@ impl NullifierKey {
     }
 }
 
-/// The nonce of a created resource, which the nullifier of the consumed resource of its compliance unit makes unique.
-pub fn created_nonce(nullifier: Fr) -> Fr {
-    hash(Domain::Nonce, &[nullifier])
+/// The nonce of the created resource at `index` among the created resources of a compliance unit, whose consumed
+/// nullifiers make it unique.
+pub fn created_nonce(index: usize, nullifiers: &[Fr]) -> Fr {
+    let nullifiers = nullifiers
+        .iter()
+        .fold(Fr::from(0u64), |digest, &nullifier| {
+            hash(Domain::Nullifiers, &[digest, nullifier])
+        });
+    hash(Domain::Nonce, &[Fr::from(index as u64), nullifiers])
 }

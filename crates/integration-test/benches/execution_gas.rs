@@ -1,5 +1,5 @@
-//! Measures the gas that a wrap, a transfer and an unwrap without fees, and a transfer with change, use on anvil with
-//! the Osaka hardfork, and prints it as a Markdown table. The created persistent tokens carry discovery app data for
+//! Measures the gas that a wrap, a transfer and an unwrap without fees, a transfer with change, and a split of one token
+//! into three use on anvil with the Osaka hardfork, and prints it as a Markdown table. The created persistent tokens carry discovery app data for
 //! their owners. It needs the compiled circuits, nargo, bb, forge and anvil, as the slow tests do.
 
 use std::path::PathBuf;
@@ -33,15 +33,19 @@ async fn main() -> anyhow::Result<()> {
     let [alice_keys, bob_keys] = [(); 2].map(|()| GrumpkinSecretKeys::random());
     let mut belt = Belt::default();
 
-    // Three tokens of Alice, which the transfer, the unwrap and the transfer with change consume.
-    let held: Vec<ActionWitness> = [11, 12, 13]
+    // Four tokens of Alice, which the transfer, the unwrap, the transfer with change and the split consume.
+    let held: Vec<ActionWitness> = [11, 12, 13, 14]
         .into_iter()
         .map(|seed| fixtures::mint(&issuer, token(&issuer, 5, &alice, seed)?, seed + 10))
         .collect::<anyhow::Result<_>>()?;
     execute(&chain, &wrapper, &mut belt, &held).await?;
+    let held_tokens = held
+        .iter()
+        .map(fixtures::first_created)
+        .collect::<anyhow::Result<Vec<_>>>()?;
     let spend = |index: usize, created: Resource, rcv: u64, belt: &Belt| {
         fixtures::action(
-            held[index].created,
+            held_tokens[index],
             alice.token_logic(),
             alice.nullifier_key,
             Membership::Persistent(belt.path(index)?),
@@ -53,12 +57,12 @@ async fn main() -> anyhow::Result<()> {
 
     let mut executed = Vec::new();
     let wrap = [discoverable(
-        fixtures::mint(&issuer, token(&issuer, 5, &alice, 14)?, 24)?,
+        fixtures::mint(&issuer, token(&issuer, 5, &alice, 15)?, 25)?,
         &alice_keys,
     )?];
     executed.push(("Wrap", execute(&chain, &wrapper, &mut belt, &wrap).await?));
     let transfer = [discoverable(
-        spend(0, token(&issuer, 5, &bob, 15)?, 25, &belt)?,
+        spend(0, token(&issuer, 5, &bob, 16)?, 26, &belt)?,
         &bob_keys,
     )?];
     executed.push((
@@ -67,25 +71,25 @@ async fn main() -> anyhow::Result<()> {
     ));
     let ephemeral = Resource {
         is_ephemeral: true,
-        ..token(&issuer, 5, &alice, 16)?
+        ..token(&issuer, 5, &alice, 17)?
     };
-    let unwrap = [spend(1, ephemeral, 26, &belt)?];
+    let unwrap = [spend(1, ephemeral, 27, &belt)?];
     executed.push((
         "Unwrap",
         execute(&chain, &wrapper, &mut belt, &unwrap).await?,
     ));
     // The change comes from an ephemeral token of quantity 0, which needs no signature.
     let change = ActionWitness::from_ephemeral(
-        token(&issuer, 2, &alice, 17)?,
+        token(&issuer, 2, &alice, 18)?,
         0,
-        NullifierKey(Fr::from(27u64)),
+        NullifierKey(Fr::from(28u64)),
         alice.token_logic(),
         belt.root(),
-        Scalar::from(27u64),
+        Scalar::from(28u64),
     )?;
     let transfer_with_change = [
         discoverable(
-            spend(2, token(&issuer, 3, &bob, 18)?, 28, &belt)?,
+            spend(2, token(&issuer, 3, &bob, 19)?, 29, &belt)?,
             &bob_keys,
         )?,
         discoverable(change, &alice_keys)?,
@@ -93,6 +97,26 @@ async fn main() -> anyhow::Result<()> {
     executed.push((
         "Transfer with change",
         execute(&chain, &wrapper, &mut belt, &transfer_with_change).await?,
+    ));
+    let split = [discoverable(
+        fixtures::split(
+            held_tokens[3],
+            alice.token_logic(),
+            alice.nullifier_key,
+            Membership::Persistent(belt.path(3)?),
+            &[
+                token(&issuer, 1, &bob, 20)?,
+                token(&issuer, 2, &bob, 21)?,
+                token(&issuer, 2, &bob, 22)?,
+            ],
+            bob.token_logic(),
+            30,
+        )?,
+        &bob_keys,
+    )?];
+    executed.push((
+        "Split into three",
+        execute(&chain, &wrapper, &mut belt, &split).await?,
     ));
 
     let mut gas = Vec::new();
@@ -186,8 +210,10 @@ fn discoverable(
     mut witness: ActionWitness,
     keys: &GrumpkinSecretKeys,
 ) -> anyhow::Result<ActionWitness> {
-    witness.created_app_data =
-        GrumpkinDiscovery.app_data(&keys.address(), &witness.created.to_fields())?;
+    for created in witness.created_mut() {
+        created.app_data =
+            GrumpkinDiscovery.app_data(&keys.address(), &created.resource.to_fields())?;
+    }
     Ok(witness)
 }
 
@@ -209,7 +235,7 @@ async fn execute(
     let commitments: Vec<Fr> = partial
         .actions
         .iter()
-        .map(|proved| proved.action.commitment)
+        .flat_map(|proved| proved.action.commitments())
         .collect();
     belt.append(&commitments);
     Ok(receipt.transaction_hash)

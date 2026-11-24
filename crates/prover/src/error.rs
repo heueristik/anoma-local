@@ -45,6 +45,15 @@ pub enum Error {
     Unbalanced,
     #[error("the transaction has no actions")]
     Empty,
+    #[error(
+        "an action has {resource_count} resources; the circuits take actions of 1 to {max} resources"
+    )]
+    ResourceCount { resource_count: usize, max: usize },
+    #[error("an action of {resource_count} resources carries {logic_proof_count} logic proofs")]
+    LogicProofCount {
+        logic_proof_count: usize,
+        resource_count: usize,
+    },
     #[error(transparent)]
     Arm(#[from] anoma_arm::Error),
     #[error("cannot wrap the root proof: {0}")]

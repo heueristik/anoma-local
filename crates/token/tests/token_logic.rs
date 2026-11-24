@@ -5,13 +5,12 @@
 
 use std::sync::Arc;
 
-use anoma_arm::app_data::AppData;
 use anoma_arm::belt::Belt;
-use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
+use anoma_arm::resource::{NullifierKey, Resource};
 use anoma_arm::{Fr, Scalar};
 use anoma_integration_test::fixtures::circuit_prover;
 use anoma_prover::Error;
-use anoma_prover::action::{self, ActionWitness, Membership};
+use anoma_prover::action::{self, ActionWitness, Membership, ResourceWitness};
 use anoma_prover::circuit_prover::{CircuitError, CircuitProver};
 use anoma_token::{CIRCUIT, TokenLogic, public_key_hash};
 use p256::ecdsa::SigningKey;
@@ -123,23 +122,26 @@ fn transfer(token: Resource, signer: SigningKey) -> anyhow::Result<ActionWitness
     let nullifier_key = NullifierKey(Fr::from(42u64));
     let mut belt = Belt::default();
     belt.append(&[token.commitment()]);
-    Ok(ActionWitness {
-        consumed: token,
-        consumed_logic: Arc::new(TokenLogic {
-            signer: Some(Arc::new(signer)),
-        }),
-        consumed_app_data: AppData::default(),
-        nullifier_key,
-        membership: Membership::Persistent(belt.path(0)?),
-        created: Resource {
-            nonce: created_nonce(token.nullifier(nullifier_key)?),
-            rand_seed: Fr::from(10u64),
-            ..token
-        },
-        created_logic: Arc::new(TokenLogic::default()),
-        created_app_data: AppData::default(),
-        rcv: Scalar::from(8u64),
-    })
+    Ok(ActionWitness::new(
+        vec![
+            ResourceWitness::consumed(
+                token,
+                Arc::new(TokenLogic {
+                    signer: Some(Arc::new(signer)),
+                }),
+                nullifier_key,
+                Membership::Persistent(belt.path(0)?),
+            ),
+            ResourceWitness::created(
+                Resource {
+                    rand_seed: Fr::from(10u64),
+                    ..token
+                },
+                Arc::new(TokenLogic::default()),
+            ),
+        ],
+        Scalar::from(8u64),
+    )?)
 }
 
 fn expect_unsatisfied(

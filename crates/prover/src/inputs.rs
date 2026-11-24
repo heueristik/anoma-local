@@ -1,6 +1,7 @@
 //! The inputs of the circuits, with the names and shapes of their Noir parameters, as nargo reads them. A resource
 //! logic builds its private inputs from the public types.
 
+use anoma_arm::action::ResourceInstance;
 use anoma_arm::field::{coordinates, scalar_limbs, to_hex};
 use anoma_arm::{Fr, Point};
 use serde::{Serialize, Serializer};
@@ -136,22 +137,52 @@ impl TryFrom<&anoma_arm::belt::MembershipPath> for MembershipPath {
     }
 }
 
+/// A `ResourceInstance` of the compliance circuit.
 #[derive(Serialize)]
-pub(crate) struct Compliance {
-    pub nullifier: Field,
-    pub consumed_logic_ref: Field,
-    pub commitment_tree_root: Field,
-    pub commitment: Field,
-    pub created_logic_ref: Field,
-    pub delta_x: Field,
-    pub delta_y: Field,
-    pub consumed: Resource,
+pub(crate) struct ComplianceResourceInstance {
+    is_consumed: bool,
+    tag: Field,
+    logic_ref: Field,
+    commitment_tree_root: Field,
+}
+
+impl From<&ResourceInstance> for ComplianceResourceInstance {
+    fn from(resource: &ResourceInstance) -> Self {
+        Self {
+            is_consumed: resource.is_consumed,
+            tag: Field(resource.tag),
+            logic_ref: Field(resource.logic_ref),
+            commitment_tree_root: Field(resource.commitment_tree_root),
+        }
+    }
+}
+
+/// A `ResourceWitness` of the compliance circuit.
+#[derive(Serialize)]
+pub(crate) struct ComplianceResourceWitness {
+    pub resource: Resource,
+    pub kind: KindWitness,
     pub nullifier_key: Field,
     pub path: MembershipPath,
-    pub consumed_kind: KindWitness,
-    pub created: Resource,
-    pub created_kind: KindWitness,
+}
+
+#[derive(Serialize)]
+pub(crate) struct ComplianceInstance {
+    pub resources: Vec<ComplianceResourceInstance>,
+    pub delta_x: Field,
+    pub delta_y: Field,
+}
+
+#[derive(Serialize)]
+pub(crate) struct ComplianceWitness {
+    pub resources: Vec<ComplianceResourceWitness>,
     pub rcv: Scalar,
+}
+
+#[derive(Serialize)]
+pub(crate) struct Compliance {
+    pub instance: ComplianceInstance,
+    pub witness: ComplianceWitness,
 }
 
 /// The four public inputs of every resource logic, and the private inputs of one logic.
@@ -165,41 +196,68 @@ pub(crate) struct Logic<'a> {
     pub private_inputs: &'a CircuitInputs,
 }
 
+/// An `ActionTreePath`, which a resource logic takes to find a resource in its action.
 #[derive(Serialize)]
-pub(crate) struct ActionInstance {
-    nullifier: Field,
-    consumed_logic_ref: Field,
-    consumed_app_data_hash: Field,
-    commitment: Field,
-    created_logic_ref: Field,
-    created_app_data_hash: Field,
-    commitment_tree_root: Field,
+pub struct ActionTreePath {
+    siblings: Vec<Field>,
+    index: u32,
 }
 
-impl From<anoma_arm::digest::ActionInstance> for ActionInstance {
-    fn from(instance: anoma_arm::digest::ActionInstance) -> Self {
+impl From<&anoma_arm::action::ActionTreePath> for ActionTreePath {
+    fn from(path: &anoma_arm::action::ActionTreePath) -> Self {
         Self {
-            nullifier: Field(instance.nullifier),
-            consumed_logic_ref: Field(instance.consumed_logic_ref),
-            consumed_app_data_hash: Field(instance.consumed_app_data_hash),
-            commitment: Field(instance.commitment),
-            created_logic_ref: Field(instance.created_logic_ref),
-            created_app_data_hash: Field(instance.created_app_data_hash),
-            commitment_tree_root: Field(instance.commitment_tree_root),
+            siblings: fields(&path.siblings),
+            // An index of an action tree is below `MAX_RESOURCES`.
+            index: path.index as u32,
+        }
+    }
+}
+
+/// A `ResourceInstance` of the digest of the step circuits: the public data of a resource with its app data hash.
+#[derive(Serialize)]
+pub(crate) struct StepResourceInstance {
+    is_consumed: bool,
+    tag: Field,
+    logic_ref: Field,
+    commitment_tree_root: Field,
+    app_data_hash: Field,
+}
+
+impl From<&ResourceInstance> for StepResourceInstance {
+    fn from(resource: &ResourceInstance) -> Self {
+        Self {
+            is_consumed: resource.is_consumed,
+            tag: Field(resource.tag),
+            logic_ref: Field(resource.logic_ref),
+            commitment_tree_root: Field(resource.commitment_tree_root),
+            app_data_hash: Field(resource.app_data.hash()),
         }
     }
 }
 
 #[derive(Serialize)]
 pub(crate) struct ActionProofs {
-    pub instance: ActionInstance,
+    pub resources: Vec<StepResourceInstance>,
     pub delta_x: Field,
     pub delta_y: Field,
     pub compliance_proof: Vec<Field>,
-    pub consumed_logic_vk: Vec<Field>,
-    pub consumed_logic_proof: Vec<Field>,
-    pub created_logic_vk: Vec<Field>,
-    pub created_logic_proof: Vec<Field>,
+    pub logic_vks: Vec<Vec<Field>>,
+    pub logic_proofs: Vec<Vec<Field>>,
+}
+
+/// The key hashes of the compliance and step circuits; entry k - 1 is the circuit of an action of k resources.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct CircuitKeys {
+    pub compliance: Vec<Field>,
+    pub first_step: Vec<Field>,
+    pub next_step: Vec<Field>,
+}
+
+/// A step circuit: the first or a next step, for an action of `size` resources.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct StepCircuit {
+    pub is_first_step: bool,
+    pub size: u32,
 }
 
 /// A `StepState`, which is also the list of public inputs of a step proof.
@@ -208,54 +266,41 @@ pub(crate) struct StepState {
     pub digest: Field,
     pub delta_x: Field,
     pub delta_y: Field,
-    pub compliance_key_hash: Field,
-    pub first_step_key_hash: Field,
-    pub next_step_key_hash: Field,
+    pub keys_hash: Field,
 }
 
 impl StepState {
     pub fn from_public_inputs(circuit: &str, public_inputs: &[Fr]) -> Result<Self, Error> {
-        let &[
-            digest,
-            delta_x,
-            delta_y,
-            compliance_key_hash,
-            first_step_key_hash,
-            next_step_key_hash,
-        ] = public_inputs
-        else {
+        let &[digest, delta_x, delta_y, keys_hash] = public_inputs else {
             return Err(Error::PublicInputCount {
                 circuit: circuit.to_string(),
                 count: public_inputs.len(),
-                expected: 6,
+                expected: 4,
             });
         };
         Ok(Self {
             digest: Field(digest),
             delta_x: Field(delta_x),
             delta_y: Field(delta_y),
-            compliance_key_hash: Field(compliance_key_hash),
-            first_step_key_hash: Field(first_step_key_hash),
-            next_step_key_hash: Field(next_step_key_hash),
+            keys_hash: Field(keys_hash),
         })
     }
 }
 
 #[derive(Serialize)]
-pub(crate) struct FirstStep {
+pub(crate) struct FirstStep<'a> {
+    pub keys: &'a CircuitKeys,
     pub compliance_vk: Vec<Field>,
-    pub compliance_key_hash: Field,
-    pub first_step_key_hash: Field,
-    pub next_step_key_hash: Field,
     pub action: ActionProofs,
 }
 
 #[derive(Serialize)]
-pub(crate) struct NextStep {
+pub(crate) struct NextStep<'a> {
     pub previous_vk: Vec<Field>,
     pub previous_proof: Vec<Field>,
     pub previous: StepState,
-    pub previous_is_first_step: bool,
+    pub previous_circuit: StepCircuit,
+    pub keys: &'a CircuitKeys,
     pub compliance_vk: Vec<Field>,
     pub action: ActionProofs,
 }
@@ -265,7 +310,7 @@ pub(crate) struct Root {
     pub last_vk: Vec<Field>,
     pub last_proof: Vec<Field>,
     pub last: StepState,
-    pub last_is_first_step: bool,
+    pub last_circuit: StepCircuit,
     pub rcv_total: Scalar,
     pub chain_id: Field,
     pub verifier: Field,
