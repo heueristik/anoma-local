@@ -11,7 +11,7 @@ The terms are in [CONTEXT.md](CONTEXT.md).
 | Path | Content |
 | --- | --- |
 | `contracts/` | The `AnomaVerifier` contract, its Poseidon2 commitment tree and the action digest |
-| `circuits/` | The Noir circuits: `compliance`, the logics `trivial_logic`, `intent_logic` and `token_logic`, `first_step`, `next_step` and `root` |
+| `circuits/` | The Noir circuits: the libraries `arm`, `compliance` and `step`, the logics `trivial_logic`, `intent_logic` and `token_logic`, `root`, and in `variants/` the compliance and step circuits for each size of action |
 | `crates/arm` | The resource machine outside the circuits: resources, kinds, deltas, the commitment tree and the action digest |
 | `crates/groth16-wrap` | The Groth16 wrap of a bb proof through a Go library on gnark, and the wrapper of the root proof |
 | `crates/prover` | Proves actions and transactions through the `CircuitProver`, `RootProofWrapper` and `ResourceLogic` traits, and the circuit prover on nargo and bb |
@@ -52,9 +52,9 @@ The chain is the ABI of the AnomaVerifier. `crates/bindings` and the `Chain` of 
 
 ## How a transaction is proved
 
-1. For each action, its party proves the compliance circuit and the logics of the consumed and the created resource. These leaf proofs are ZK UltraHonk proofs.
+1. For each action, its party proves the compliance circuit for the size of the action and the logic of each of its resources. These leaf proofs are ZK UltraHonk proofs.
 2. A partial transaction is a list of proved actions and the sum of their rcv values. Partial transactions compose.
-3. `first_step` verifies the leaf proofs of the first action. Each `next_step` verifies the previous step proof and the leaf proofs of one more action. Each step adds the action to the action digest and its delta to the sum of the deltas.
+3. `first_step_k` verifies the leaf proofs of the first action, of k resources. Each `next_step_k` verifies the previous step proof and the leaf proofs of one more action of k resources. Each step adds the action to the action digest and its delta to the sum of the deltas.
 4. `root` verifies the last step proof, checks that the transaction is balanced, and binds the action digest to the chain ID and the address of the AnomaVerifier.
 5. The gnark circuit wraps the root proof into a Groth16 proof. The contract checks it against the bound action digest of the transaction.
 

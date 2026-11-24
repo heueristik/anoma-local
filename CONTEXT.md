@@ -13,17 +13,19 @@ The goal of Anoma local is to make general, privacy-preserving, intent-centric a
 - **Logic ref**: the key hash of the logic circuit of a resource. A leaf proof of that circuit must exist for each resource of a transaction.
 - **Label ref**: the hash of the label of a resource. The logic ref and the label ref together give the **kind**.
 - **Kind base**: a Grumpkin point, one for each kind, with no known discrete logarithm.
-- **Action**: one consumed and one created resource, with their app data and the commitment tree root of the membership path.
-- **Action tree root**: the hash of the tags of the consumed and the created resource of an action. Each logic proof of the action takes it as a public input.
-- **Delta**: the Grumpkin point of an action: the consumed quantity times its kind base, minus the created quantity times its kind base, plus the rcv times the generator.
+- **Action**: one compliance unit: a list of 1 to 8 resources in any order, of which at least one is consumed. Each resource has its app data, and a consumed resource has the commitment tree root of its membership path. The contract makes the forwarder calls in the order of the list.
+- **Created nonce**: the nonce of a created resource: the hash of its position among the created resources of its action and of the hash chain over the nullifiers of the action, in their order. The nullifiers are unique, so each nonce and each commitment is unique.
+- **Action tree root**: the root of a Poseidon2 Merkle tree of depth 3 over the tags of an action, in their order, with padding leaves of zero after them. Each logic proof of the action takes it as a public input. A logic finds another resource of its action with a path to the tag of that resource.
+- **Delta**: the Grumpkin point of an action: each consumed quantity times its kind base, minus each created quantity times its kind base, plus the rcv times the generator.
 - **rcv**: the random scalar of an action that hides its quantities in the delta.
 
 ## Proofs
 
-- **Leaf proof**: a ZK UltraHonk proof of the compliance circuit or of a resource logic. Each action has three: compliance, the logic of the consumed resource and the logic of the created resource.
+- **Leaf proof**: a ZK UltraHonk proof of a compliance circuit or of a resource logic. Each action has one compliance proof, and one logic proof for each resource in the order of the list.
 - **Partial transaction**: a list of proved actions and the sum of their rcv values. Partial transactions compose by joining both lists and adding the sums.
 - **Balanced**: a partial transaction whose sum of deltas is the generator times its sum of rcv values. Then the quantities of each kind balance.
-- **Step proof**: a non-ZK UltraHonk proof of `first_step` or `next_step`. It verifies the leaf proofs of one action and, for `next_step`, the previous step proof.
+- **Circuit variant**: the circuit for one size k of action, from 1 to 8: `compliance_k`, `first_step_k` and `next_step_k`. `just circuits-variants` writes them from the `compliance` and `step` libraries. Each step state carries the hash of the key hashes of all variants, and `root` checks it against its constant. So a larger maximum size needs new circuits, a new Groth16 setup and a new AnomaVerifier.
+- **Step proof**: a non-ZK UltraHonk proof of a `first_step_k` or `next_step_k` circuit. It verifies the leaf proofs of one action of k resources and, for `next_step_k`, the previous step proof.
 - **Root proof**: the proof of `root`. It verifies the last step proof and checks that the transaction is balanced.
 - **Groth16 wrap**: the gnark circuit that verifies the root proof. Its Groth16 proof is the one proof that the contract checks.
 - **Action digest**: the hash chain over the actions of a transaction. The step circuits compute it, and the contract computes it again from the transaction. The root proof binds it to the chain ID and the address of one AnomaVerifier, so that the proof verifies on that AnomaVerifier only.
@@ -42,7 +44,7 @@ The goal of Anoma local is to make general, privacy-preserving, intent-centric a
 ## Intents and solvers
 
 - **Intent**: an ephemeral resource whose label is the hash of its terms. Its creator gives up what the action consumes. The action that consumes the intent must create the resource of its terms.
-- **Terms**: each field of the resource that the creator of an intent wants, except the nonce: the kind, the value ref, the quantity, the nullifier key commitment of the receiver and the random seed. The nonce comes from the nullifier of the intent, so the receiver can compute the resource without a payload.
+- **Terms**: each field of the resource that the creator of an intent wants, except the nonce: the kind, the value ref, the quantity, the nullifier key commitment of the receiver and the random seed. The nonce comes from the compliance unit, so the receiver computes it from the nullifiers of the action that fills the intent. A fresh random seed for each intent keeps two intents from accepting the same resource.
 - **Payload**: the data that a solver needs to fill an intent: the intent and its nullifier key, the terms, the offer, the rcv sum and the address of the receiver. The creator encrypts it to the solver.
 - **Discovery**: how a receiver finds its resources. The creator encrypts payloads in the app data of a resource to the **address** of the receiver, its public keys. The receiver finds its resources with its secret keys. In the Grumpkin scheme, the creator adds a discovery blob, an empty message for the discovery key, and the encrypted plaintext of the resource, and the receiver tries to decrypt every discovery blob. The plaintexts are field elements, and Grumpkin and Poseidon2 encrypt them, so a BN254 circuit can compute the encryption.
 - **Intent pool**: a list of unbalanced partial transactions. The pool checks nothing. A solver finds the intents whose payloads are for its keys, and checks the payload and the actions of an intent before it fills it.
