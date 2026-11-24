@@ -70,6 +70,10 @@ jobs:
       - name: Run Forge fmt
         run: just contracts-fmt-check
 
+      # The differential tests run a Rust binary, which `just contracts-test` builds.
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Run Forge tests
         run: just contracts-test
 

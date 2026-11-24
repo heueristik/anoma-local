@@ -21,6 +21,7 @@ The terms are in [CONTEXT.md](CONTEXT.md).
 | `crates/intent-pool` | The `IntentPool` trait, and a pool in memory |
 | `crates/solver` | A solver of intents, the `Matcher` trait, and a matcher with the CP-SAT solver of OR-Tools |
 | `crates/bindings` | The Rust bindings of the `AnomaVerifier` |
+| `crates/belt-ffi` | The commitment tree of `crates/arm` as a command, which the differential contract tests run |
 | `crates/integration-test` | The fixtures and the anvil chain of the end-to-end tests |
 
 ## Components

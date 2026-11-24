@@ -39,8 +39,12 @@ contracts-build *args:
     cd contracts && forge build {{ args }}
 
 # Run contract tests
-contracts-test *args:
+contracts-test *args: belt-ffi-build
     cd contracts && forge test --force {{ args }}
+
+# Build the Rust belt that the differential contract tests run
+belt-ffi-build:
+    cargo build --release -p anoma-belt-ffi
 
 # Lint contracts: forge lint, then solhint for the rules that forge lint lacks
 contracts-lint:

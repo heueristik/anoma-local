@@ -968,6 +968,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "anoma-belt-ffi"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "alloy-sol-types",
+ "anoma-arm",
+ "anyhow",
+]
+
+[[package]]
 name = "anoma-bindings"
 version = "0.1.0"
 dependencies = [

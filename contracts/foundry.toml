@@ -8,6 +8,7 @@ via_ir = true
 optimizer_runs = 10_000
 bytecode_hash = "none"
 allow_internal_expect_revert = true
+ffi = true                           # The differential tests run the Rust binary of `crates/belt-ffi`.
 
 src = "src"
 test = "test"

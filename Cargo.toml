@@ -12,6 +12,8 @@ homepage = "https://anoma.net/"
 [workspace.dependencies]
 acir_field = "1.0.0"
 alloy = { version = "2.6.1", features = ["full", "node-bindings"] }
+alloy-primitives = "1.7.3"
+alloy-sol-types = "1.7.3"
 anoma-arm = { path = "crates/arm" }
 anoma-bindings = { path = "crates/bindings" }
 anoma-discovery = { path = "crates/discovery" }
