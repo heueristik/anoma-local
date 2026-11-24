@@ -47,9 +47,30 @@ pub fn nullifier_key_commitment(nullifier_key: Field) -> Field {
     hash(hash::NULLIFIER_KEY, [nullifier_key])
 }
 
-/// The nonce of a created resource, which the nullifier of the consumed resource of its compliance unit makes unique.
-pub fn created_nonce(nullifier: Field) -> Field {
-    hash(hash::NONCE, [nullifier])
+/// Adds a consumed nullifier to the digest of the consumed nullifiers of a compliance unit before it; the digest of no
+/// nullifiers is zero.
+pub fn extend_nullifiers(digest: Field, nullifier: Field) -> Field {
+    hash(hash::NULLIFIERS, [digest, nullifier])
+}
+
+/// The nonce of the created resource at `index` among the created resources of its compliance unit. The digest of the
+/// consumed nullifiers makes it unique, since the contract accepts each nullifier once.
+pub fn created_nonce(index: u32, nullifiers: Field) -> Field {
+    hash(hash::NONCE, [index as Field, nullifiers])
+}
+
+#[test]
+fn created_nonce_changes_with_the_index() {
+    let nullifiers = extend_nullifiers(0, 1);
+    assert(created_nonce(0, nullifiers) != created_nonce(1, nullifiers));
+}
+
+#[test]
+fn extend_nullifiers_depends_on_the_order_of_the_nullifiers() {
+    assert(
+        extend_nullifiers(extend_nullifiers(0, 1), 2)
+            != extend_nullifiers(extend_nullifiers(0, 2), 1),
+    );
 }
 
 #[test]

@@ -1,33 +1,34 @@
-/// The number of bytes that the contract hashes for one action: the digest before it and the seven fields of the action.
-global ACTION_BYTES: u32 = 8 * 32;
+/// The number of fields that the contract hashes for one resource of an action.
+global RESOURCE_FIELDS: u32 = 5;
 
 /// The app data hash of a resource with four empty payloads: the low 253 bits of the SHA-256 hash of four 4-byte zero counts.
 pub global EMPTY_APP_DATA_HASH: Field =
     0x174708fff7719dd5979ec875d56cd2286f6d3cf7ec317a3b25632aab28ec37bb;
 
-/// The public data of one action, in the order of the contract's `Action`, with each app data replaced by its hash.
-pub struct ActionInstance {
-    pub nullifier: Field,
-    pub consumed_logic_ref: Field,
-    pub consumed_app_data_hash: Field,
-    pub commitment: Field,
-    pub created_logic_ref: Field,
-    pub created_app_data_hash: Field,
+/// The public data of one resource of an action, in the order of the contract's `Resource`, with its app data replaced
+/// by its hash. A created resource has the commitment tree root zero.
+pub struct ResourceInstance {
+    pub is_consumed: bool,
+    pub tag: Field,
+    pub logic_ref: Field,
     pub commitment_tree_root: Field,
+    pub app_data_hash: Field,
 }
 
-/// Extends the action digest with an action, as the contract does: the low 253 bits of the SHA-256 hash of the digest and the fields of the action, each as 32 big-endian bytes.
-pub fn extend(digest: Field, action: ActionInstance) -> Field {
-    let bytes: [u8; ACTION_BYTES] = be_bytes([
-        digest,
-        action.nullifier,
-        action.consumed_logic_ref,
-        action.consumed_app_data_hash,
-        action.commitment,
-        action.created_logic_ref,
-        action.created_app_data_hash,
-        action.commitment_tree_root,
-    ]);
+/// Extends the action digest with an action, as the contract does: the low 253 bits of the SHA-256 hash of the digest
+/// and the fields of each resource in the order of the list, each as 32 big-endian bytes.
+pub fn extend<let K: u32>(digest: Field, resources: [ResourceInstance; K]) -> Field {
+    let mut fields = [digest; 1 + RESOURCE_FIELDS * K];
+    for i in 0..K {
+        let resource = resources[i];
+        let first = 1 + RESOURCE_FIELDS * i;
+        fields[first] = resource.is_consumed as Field;
+        fields[first + 1] = resource.tag;
+        fields[first + 2] = resource.logic_ref;
+        fields[first + 3] = resource.commitment_tree_root;
+        fields[first + 4] = resource.app_data_hash;
+    }
+    let bytes: [u8; 32 * (1 + RESOURCE_FIELDS * K)] = be_bytes(fields);
     low_253_bits(sha256::digest(bytes))
 }
 
@@ -66,21 +67,19 @@ fn low_253_bits_clears_the_top_three_bits() {
 }
 
 #[test]
-fn extend_hashes_the_digest_and_the_action_fields_in_order() {
-    let action = ActionInstance {
-        nullifier: 1,
-        consumed_logic_ref: 2,
-        consumed_app_data_hash: 3,
-        commitment: 4,
-        created_logic_ref: 5,
-        created_app_data_hash: 6,
-        commitment_tree_root: 7,
+fn extend_hashes_the_digest_and_the_resource_fields_in_order() {
+    let resource = ResourceInstance {
+        is_consumed: true,
+        tag: 2,
+        logic_ref: 3,
+        commitment_tree_root: 4,
+        app_data_hash: 5,
     };
-    let mut bytes = [0; ACTION_BYTES];
-    for i in 0..8 {
+    let mut bytes = [0; 32 * (1 + RESOURCE_FIELDS)];
+    for i in 0..1 + RESOURCE_FIELDS {
         bytes[32 * i + 31] = i as u8;
     }
-    assert_eq(extend(0, action), low_253_bits(sha256::digest(bytes)));
+    assert_eq(extend(0, [resource]), low_253_bits(sha256::digest(bytes)));
 }
 
 #[test]
@@ -96,18 +95,23 @@ fn bind_matches_the_contract() {
 
 #[test]
 fn extend_matches_the_contract() {
-    // The digest that the contract passes to the verifier for this action without blobs, on the empty commitment tree.
-    let action = ActionInstance {
-        nullifier: 1,
-        consumed_logic_ref: 2,
-        consumed_app_data_hash: EMPTY_APP_DATA_HASH,
-        commitment: 4,
-        created_logic_ref: 5,
-        created_app_data_hash: EMPTY_APP_DATA_HASH,
+    // The digest that the contract computes for an action of a consumed and a created resource without blobs.
+    let consumed = ResourceInstance {
+        is_consumed: true,
+        tag: 1,
+        logic_ref: 2,
+        commitment_tree_root: 3,
+        app_data_hash: EMPTY_APP_DATA_HASH,
+    };
+    let created = ResourceInstance {
+        is_consumed: false,
+        tag: 4,
+        logic_ref: 5,
         commitment_tree_root: 0,
+        app_data_hash: EMPTY_APP_DATA_HASH,
     };
     assert_eq(
-        extend(0, action),
-        0x10545fff186a4bd171fe33842768c98e12133b06c13ee14b99182ef580ef78bf,
+        extend(0, [consumed, created]),
+        0x0b60bead17f79a743fd35dc5f1d9948be77dceede95f75c6a7de00414a41138d,
     );
 }
