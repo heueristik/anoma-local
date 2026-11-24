@@ -1,0 +1,115 @@
+"""
+One call of `execute` on an AnomaVerifier. One EVM transaction can hold several calls.
+"""
+type Transaction {
+  id: ID!
+  chainId: Int!
+  verifier: String!
+  actionDigest: String! @index
+  actions: [Action!]! @derivedFrom(field: "transaction")
+  forwarderCalls: [ForwarderCall!]! @derivedFrom(field: "transaction")
+  txHash: String! @index
+  blockNumber: BigInt!
+  logIndex: Int!
+  timestamp: BigInt!
+}
+
+"""
+One action: it consumes one resource and creates one resource.
+"""
+type Action {
+  id: ID!
+  chainId: Int!
+  verifier: String!
+  transaction: Transaction!
+  nullifier: String! @index
+  commitment: String! @index
+  """
+  The position of the commitment in the commitment tree of the verifier.
+  """
+  commitmentLeafIndex: BigInt! @index
+  consumedLogicRef: String! @index
+  createdLogicRef: String! @index
+  txHash: String! @index
+  blockNumber: BigInt!
+  logIndex: Int!
+  timestamp: BigInt!
+}
+
+enum PayloadKind {
+  Resource
+  Discovery
+  External
+  Application
+}
+
+"""
+A blob of a resource whose deletion criterion is `Never`.
+"""
+type Payload {
+  id: ID!
+  chainId: Int!
+  verifier: String!
+  kind: PayloadKind!
+  """
+  The nullifier of a consumed resource, or the commitment of a created resource.
+  """
+  tag: String! @index
+  """
+  The position of the blob in its payload list.
+  """
+  index: BigInt!
+  blob: String!
+  txHash: String! @index
+  blockNumber: BigInt!
+  logIndex: Int!
+  timestamp: BigInt!
+}
+
+type ForwarderCall {
+  id: ID!
+  chainId: Int!
+  verifier: String!
+  transaction: Transaction!
+  forwarder: String! @index
+  input: String!
+  output: String!
+  txHash: String! @index
+  blockNumber: BigInt!
+  logIndex: Int!
+  timestamp: BigInt!
+}
+
+"""
+A root of the commitment tree of a verifier, after its first `leafCount` commitments.
+"""
+type CommitmentTreeRoot {
+  id: ID!
+  chainId: Int!
+  verifier: String!
+  root: String! @index
+  leafCount: BigInt!
+  txHash: String! @index
+  blockNumber: BigInt!
+  logIndex: Int!
+  timestamp: BigInt!
+}
+
+"""
+The commitment tree of a verifier.
+"""
+type CommitmentTree {
+  id: ID!
+  chainId: Int!
+  verifier: String!
+  leafCount: BigInt!
+  latestRoot: String!
+}
+
+"""
+The number of `execute` calls of a verifier that one EVM transaction finished so far.
+"""
+type ExecuteCount {
+  id: ID!
+  count: Int!
+}

@@ -1,0 +1,36 @@
+{
+  "name": "anoma-local-indexer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Envio HyperIndex indexer of the AnomaVerifier events",
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "codegen": "envio codegen && node scripts/fix-envio-types.mjs",
+    "dev": "envio dev",
+    "start": "envio start",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint 'src/**/*.ts' 'test/**/*.ts'",
+    "format": "prettier --write 'src/**/*.ts' 'test/**/*.ts' 'scripts/**/*.mjs'",
+    "format:check": "prettier --check 'src/**/*.ts' 'test/**/*.ts' 'scripts/**/*.mjs'"
+  },
+  "dependencies": {
+    "envio": "3.15.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26",
+    "@typescript-eslint/eslint-plugin": "^8.72.1",
+    "@typescript-eslint/parser": "^8.72.1",
+    "eslint": "^10.14.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.10",
+    "typescript": "5.2.2",
+    "vitest": "^5.1.0",
+    "yaml": "^2.9.1"
+  },
+  "engines": {
+    "node": ">=22.15.0"
+  }
+}

@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+name: anoma-local-indexer
+description: The events of the AnomaVerifier contract of anoma-local
+strict_hex_type: true
+field_selection:
+  transaction_fields:
+    - hash
+contracts:
+  - name: AnomaVerifier
+    # The same signatures as `IAnomaVerifier` in crates/bindings; test/config.test.ts compares them.
+    events:
+      - event: ActionExecuted(bytes32 indexed nullifier, bytes32 indexed commitment, bytes32 consumedLogicRef, bytes32 createdLogicRef)
+      - event: ApplicationPayload(bytes32 indexed tag, uint256 index, bytes blob)
+      - event: CommitmentTreeRootAdded(bytes32 root)
+      - event: DiscoveryPayload(bytes32 indexed tag, uint256 index, bytes blob)
+      - event: ExternalPayload(bytes32 indexed tag, uint256 index, bytes blob)
+      - event: ForwarderCallExecuted(address indexed untrustedForwarder, bytes input, bytes output)
+      - event: ResourcePayload(bytes32 indexed tag, uint256 index, bytes blob)
+      - event: TransactionExecuted(bytes32 indexed actionDigest)
+
+# The leaf indices count the commitments from the deployment, so each start block must be at or
+# before the deployment block of its verifier.
+chains:
+  # The default address is the AnomaVerifier that `Chain::deploy` of crates/integration-test
+  # deploys on a new anvil chain: the second contract of the first anvil account.
+  - id: 31337 # Anvil
+    start_block: 0
+    rpc: ${ENVIO_RPC_URL:-http://127.0.0.1:8545}
+    contracts:
+      - name: AnomaVerifier
+        address: ${ENVIO_ANOMA_VERIFIER_ADDRESS:-0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512}

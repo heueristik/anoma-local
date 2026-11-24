@@ -3,6 +3,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 nargo := env("NARGO", "nargo")
 bb := env("BB", "bb")
+pnpm := env("PNPM", "pnpm")
 ortools_version := "9.15.6755"
 
 # The OR-Tools C++ library that the solver links, which `just crates-tooling` installs
@@ -18,7 +19,7 @@ default:
 # --- All components ---
 
 # Run every check that CI runs
-all-check: contracts-check circuits-check crates-check
+all-check: contracts-check circuits-check crates-check indexer-check
 
 # --- Contracts ---
 
@@ -179,3 +180,40 @@ crates-fmt-check:
 
 # Run every crate check that CI runs
 crates-check: crates-fmt-check crates-build crates-lint crates-test
+
+# --- Indexer ---
+
+# Install the indexer packages from the lockfile
+indexer-deps:
+    cd indexer && {{ pnpm }} install --frozen-lockfile
+
+# Generate the indexer types from config.yaml and schema.graphql
+indexer-codegen:
+    cd indexer && {{ pnpm }} codegen
+
+# Type-check the indexer
+indexer-typecheck: indexer-codegen
+    cd indexer && {{ pnpm }} typecheck
+
+# Lint the indexer
+indexer-lint: indexer-codegen
+    cd indexer && {{ pnpm }} lint
+
+# Run the indexer tests
+indexer-test: indexer-codegen
+    cd indexer && {{ pnpm }} test
+
+# Format the indexer
+indexer-fmt:
+    cd indexer && {{ pnpm }} format
+
+# Check the indexer formatting
+indexer-fmt-check:
+    cd indexer && {{ pnpm }} format:check
+
+# Run every indexer check that CI runs
+indexer-check: indexer-fmt-check indexer-typecheck indexer-lint indexer-test
+
+# Index the chain of indexer/config.yaml into Postgres and serve it on GraphQL; needs Docker
+indexer-dev:
+    cd indexer && {{ pnpm }} dev

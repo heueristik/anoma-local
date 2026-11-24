@@ -23,6 +23,7 @@ The terms are in [CONTEXT.md](CONTEXT.md).
 | `crates/bindings` | The Rust bindings of the `AnomaVerifier` |
 | `crates/belt-ffi` | The commitment tree of `crates/arm` as a command, which the differential contract tests run |
 | `crates/integration-test` | The fixtures and the anvil chain of the end-to-end tests |
+| `indexer/` | An Envio indexer of the events of the `AnomaVerifier`, which Anoma or a user can run |
 
 ## Components
 
@@ -62,6 +63,7 @@ The chain is the ABI of the AnomaVerifier. `crates/bindings` and the `Chain` of 
 - Rust (stable) and Go 1.26.8 or later.
 - Foundry 1.9 or later, and Bun for solhint.
 - nargo 1.0.0 and bb 6.0.0. Set `NARGO` and `BB` if they are not on the `PATH`.
+- Node.js 22.15 or later and pnpm 9.15.9 for the indexer. See [indexer/README.md](indexer/README.md).
 - OR-Tools 9.15 for the solver. `just crates-tooling` installs it on arm64 macOS into `~/.ortools`. On other systems, install it and set `ORTOOLS_PREFIX`.
 
 ## Checks

@@ -1,0 +1,7 @@
+node_modules/
+.envio/
+build/
+generated/
+.env
+# pnpm 10 writes this file, and the pinned pnpm 9 then fails with "packages field missing or empty".
+pnpm-workspace.yaml
