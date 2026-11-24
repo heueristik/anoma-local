@@ -1,10 +1,10 @@
 import { indexer } from "envio";
 
-import { commitmentTreeId, eventId, executeCountId, transactionId } from "./ids.js";
+import { commitmentTreeId, eventId, executeCountId, resourceId, transactionId } from "./ids.js";
 import { eventMetadata } from "./metadata.js";
 
-// The verifier appends the commitments in the order of the events, so the leaf index of a
-// commitment is the leaf count of the tree before it.
+// The verifier appends the commitments in the order of the events and of the commitments in each
+// event, so the leaf index of a commitment is the leaf count of the tree before it.
 indexer.onEvent(
   { contract: "AnomaVerifier", event: "ActionExecuted" },
   async ({ event, context }) => {
@@ -24,16 +24,44 @@ indexer.onEvent(
       );
     }
 
-    context.CommitmentTree.set({ ...tree, leafCount: tree.leafCount + 1n });
+    const { nullifiers, consumedLogicRefs, commitments, createdLogicRefs } = event.params;
+    const metadata = eventMetadata(event);
+    const actionId = eventId(event);
+    context.CommitmentTree.set({ ...tree, leafCount: tree.leafCount + BigInt(commitments.length) });
     context.Action.set({
-      id: eventId(event),
-      ...eventMetadata(event),
+      id: actionId,
+      ...metadata,
       transaction_id: transactionId(event, executeCount?.count ?? 0),
-      nullifier: event.params.nullifier,
-      commitment: event.params.commitment,
-      commitmentLeafIndex: tree.leafCount,
-      consumedLogicRef: event.params.consumedLogicRef,
-      createdLogicRef: event.params.createdLogicRef,
+    });
+    nullifiers.forEach((nullifier, index) => {
+      context.ConsumedResource.set({
+        id: resourceId(event, "consumed", index),
+        ...metadata,
+        action_id: actionId,
+        nullifier,
+        logicRef: logicRef(consumedLogicRefs, index),
+        index,
+      });
+    });
+    commitments.forEach((commitment, index) => {
+      context.CreatedResource.set({
+        id: resourceId(event, "created", index),
+        ...metadata,
+        action_id: actionId,
+        commitment,
+        commitmentLeafIndex: tree.leafCount + BigInt(index),
+        logicRef: logicRef(createdLogicRefs, index),
+        index,
+      });
     });
   }
 );
+
+/** The logic ref at `index`; the verifier emits one logic ref for each tag. */
+function logicRef(logicRefs: readonly string[], index: number): string {
+  const ref = logicRefs[index];
+  if (ref === undefined) {
+    throw new Error(`The ActionExecuted event has no logic ref for tag ${index}`);
+  }
+  return ref;
+}

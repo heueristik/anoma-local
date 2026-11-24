@@ -12,6 +12,15 @@ export function eventId(event: EventLocation): string {
   return `${event.chainId}_${event.block.number}_${event.logIndex}`;
 }
 
+/** The id of the resource at `index` among the consumed or the created resources of the action of an event. */
+export function resourceId(
+  event: EventLocation,
+  role: "consumed" | "created",
+  index: number
+): string {
+  return `${eventId(event)}_${role}_${index}`;
+}
+
 /** The id of the commitment tree of a verifier. */
 export function commitmentTreeId(event: EventLocation): string {
   return `${event.chainId}_${event.srcAddress}`;

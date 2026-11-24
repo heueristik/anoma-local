@@ -15,21 +15,60 @@ type Transaction {
 }
 
 """
-One action: it consumes one resource and creates one resource.
+One action: one compliance unit of 1 to 8 resources, of which at least one is consumed.
 """
 type Action {
   id: ID!
   chainId: Int!
   verifier: String!
   transaction: Transaction!
+  consumed: [ConsumedResource!]! @derivedFrom(field: "action")
+  created: [CreatedResource!]! @derivedFrom(field: "action")
+  txHash: String! @index
+  blockNumber: BigInt!
+  logIndex: Int!
+  timestamp: BigInt!
+}
+
+"""
+A resource that an action consumes.
+"""
+type ConsumedResource {
+  id: ID!
+  chainId: Int!
+  verifier: String!
+  action: Action!
   nullifier: String! @index
+  logicRef: String! @index
+  """
+  The position of the resource among the consumed resources of its action. The nonces of the created resources take the
+  nullifiers in this order.
+  """
+  index: Int!
+  txHash: String! @index
+  blockNumber: BigInt!
+  logIndex: Int!
+  timestamp: BigInt!
+}
+
+"""
+A resource that an action creates.
+"""
+type CreatedResource {
+  id: ID!
+  chainId: Int!
+  verifier: String!
+  action: Action!
   commitment: String! @index
   """
   The position of the commitment in the commitment tree of the verifier.
   """
   commitmentLeafIndex: BigInt! @index
-  consumedLogicRef: String! @index
-  createdLogicRef: String! @index
+  logicRef: String! @index
+  """
+  The position of the resource among the created resources of its action, which its nonce takes.
+  """
+  index: Int!
   txHash: String! @index
   blockNumber: BigInt!
   logIndex: Int!

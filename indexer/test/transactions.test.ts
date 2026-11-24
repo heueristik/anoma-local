@@ -17,7 +17,7 @@ describe("TransactionExecuted", () => {
           simulate: [
             ...deployment(1, bytes32(0xe0)),
             ...evmTransaction(2, [
-              action(bytes32(0xa0), bytes32(0xc0)),
+              action([bytes32(0xa0)], [bytes32(0xc0)]),
               {
                 contract: "AnomaVerifier",
                 event: "ForwarderCallExecuted",
@@ -28,7 +28,7 @@ describe("TransactionExecuted", () => {
                 },
               },
               ...executeEnd(bytes32(0xe1), FIRST_DIGEST),
-              action(bytes32(0xa1), bytes32(0xc1)),
+              action([bytes32(0xa1)], [bytes32(0xc1)]),
               ...executeEnd(bytes32(0xe2), SECOND_DIGEST),
             ]),
           ],
@@ -43,8 +43,12 @@ describe("TransactionExecuted", () => {
     expect(Object.values(digestOf).sort()).toEqual([FIRST_DIGEST, SECOND_DIGEST]);
 
     const actions = await indexer.Action.getAll();
+    const transactionOfAction = Object.fromEntries(
+      actions.map((entity) => [entity.id, entity.transaction_id])
+    );
+    const created = await indexer.CreatedResource.getAll();
     const digestOfCommitment = Object.fromEntries(
-      actions.map((entity) => [entity.commitment, digestOf[entity.transaction_id]])
+      created.map((entity) => [entity.commitment, digestOf[transactionOfAction[entity.action_id]]])
     );
     expect(digestOfCommitment).toEqual({
       [bytes32(0xc0)]: FIRST_DIGEST,
