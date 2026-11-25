@@ -74,6 +74,8 @@ The chain is the ABI of the AnomaVerifier. `crates/bindings` and the `Chain` of 
 
 `just crates-prove-times` prints the time of each proof of a wrap, a transfer, an unwrap, a transfer with change and a split into three as a Markdown table. `just crates-execution-gas` executes them on anvil with the Osaka hardfork and prints their gas. Both use the same keys.
 
+`just crates-groth16-verifier` writes the Solidity verifier of these keys to `target/Groth16Verifier.sol`. Pass another path as an argument to write it elsewhere. The verifier contains the Groth16 verifying key of the root circuit, so each change of the root circuit or of the keys needs a new verifier.
+
 ## License
 
 Apache-2.0, see [LICENSE](LICENSE). The Poseidon2 contract in `contracts/vendor/` comes from the Privacy Boost protocol, under its own Apache-2.0 license.

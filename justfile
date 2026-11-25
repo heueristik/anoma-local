@@ -261,6 +261,10 @@ crates-prove-times: circuits-keys
 crates-execution-gas: circuits-keys
     NARGO={{ nargo }} BB={{ bb }} cargo bench -p anoma-integration-test --features slow-tests --bench execution_gas
 
+# Write the Solidity verifier of the Groth16 wrap for the root circuit; the first run makes the single-party setup, so the verifier is for tests only
+crates-groth16-verifier output="target/Groth16Verifier.sol": circuits-keys
+    NARGO={{ nargo }} BB={{ bb }} cargo run -p anoma-integration-test --bin groth16_verifier -- target/tmp/wrap-keys "{{ output }}"
+
 # Lint the crates for both feature sets
 crates-lint:
     cargo clippy --workspace --all-targets --no-deps -- -Dwarnings
