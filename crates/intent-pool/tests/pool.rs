@@ -1,4 +1,4 @@
-use anoma_arm::action::Action;
+use anoma_arm::action::{Action, ResourceInstance};
 use anoma_arm::app_data::AppData;
 use anoma_arm::{Fr, Point};
 use anoma_intent_pool::{IntentPool, MemoryIntentPool, PooledIntent};
@@ -7,20 +7,20 @@ use anoma_prover::circuit_prover::Proof;
 
 /// An action with the nullifier `nullifier` and empty proofs: the pool checks no proof.
 fn action(nullifier: u64) -> ProvedAction {
+    let resource = |is_consumed, tag: u64, logic_ref: u64| ResourceInstance {
+        is_consumed,
+        tag: Fr::from(tag),
+        logic_ref: Fr::from(logic_ref),
+        commitment_tree_root: Fr::from(0u64),
+        app_data: AppData::default(),
+    };
     ProvedAction {
         action: Action {
-            nullifier: Fr::from(nullifier),
-            consumed_logic_ref: Fr::from(2u64),
-            consumed_app_data: AppData::default(),
-            commitment: Fr::from(3u64),
-            created_logic_ref: Fr::from(4u64),
-            created_app_data: AppData::default(),
-            commitment_tree_root: Fr::from(0u64),
+            resources: vec![resource(true, nullifier, 2), resource(false, 3, 4)],
         },
         delta: Point::default(),
         compliance_proof: Proof::default(),
-        consumed_logic_proof: LogicProof::default(),
-        created_logic_proof: LogicProof::default(),
+        logic_proofs: vec![LogicProof::default(); 2],
     }
 }
 

@@ -23,16 +23,16 @@ export function deployment(block: number, emptyTreeRoot: `0x${string}`) {
   ]);
 }
 
-/** The `ActionExecuted` event of an action that consumes `nullifier` and creates `commitment`. */
-export function action(nullifier: `0x${string}`, commitment: `0x${string}`) {
+/** The `ActionExecuted` event of an action that consumes `nullifiers` and creates `commitments`. */
+export function action(nullifiers: `0x${string}`[], commitments: `0x${string}`[]) {
   return {
     contract: "AnomaVerifier",
     event: "ActionExecuted",
     params: {
-      nullifier,
-      commitment,
-      consumedLogicRef: bytes32(0x10),
-      createdLogicRef: bytes32(0x11),
+      nullifiers,
+      consumedLogicRefs: nullifiers.map(() => bytes32(0x10)),
+      commitments,
+      createdLogicRefs: commitments.map(() => bytes32(0x11)),
     },
   } as const;
 }

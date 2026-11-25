@@ -19,12 +19,11 @@ describe("ActionExecuted", () => {
           simulate: [
             ...deployment(1, EMPTY_TREE_ROOT),
             ...evmTransaction(2, [
-              action(bytes32(0xa0), bytes32(0xc0)),
-              action(bytes32(0xa1), bytes32(0xc1)),
+              action([bytes32(0xa0)], [bytes32(0xc0), bytes32(0xc1)]),
               ...executeEnd(ROOT_AFTER_TWO, bytes32(0xd0)),
             ]),
             ...evmTransaction(3, [
-              action(bytes32(0xa2), bytes32(0xc2)),
+              action([bytes32(0xa1), bytes32(0xa2)], [bytes32(0xc2)]),
               ...executeEnd(ROOT_AFTER_THREE, bytes32(0xd1)),
             ]),
           ],
@@ -32,9 +31,9 @@ describe("ActionExecuted", () => {
       },
     });
 
-    const actions = await indexer.Action.getAll();
+    const created = await indexer.CreatedResource.getAll();
     const leafIndices = Object.fromEntries(
-      actions.map((entity) => [entity.commitment, entity.commitmentLeafIndex])
+      created.map((entity) => [entity.commitment, entity.commitmentLeafIndex])
     );
     expect(leafIndices).toEqual({
       [bytes32(0xc0)]: 0n,
@@ -54,6 +53,39 @@ describe("ActionExecuted", () => {
     expect(tree).toMatchObject({ leafCount: 3n, latestRoot: ROOT_AFTER_THREE });
   });
 
+  it("gives each resource its position among the consumed or created resources of its action", async () => {
+    const indexer = createTestIndexer();
+
+    await indexer.process({
+      chains: {
+        [CHAIN_ID]: {
+          simulate: [
+            ...deployment(1, EMPTY_TREE_ROOT),
+            ...evmTransaction(2, [
+              action([bytes32(0xa0), bytes32(0xa1)], [bytes32(0xc0), bytes32(0xc1)]),
+              ...executeEnd(ROOT_AFTER_TWO, bytes32(0xd0)),
+            ]),
+          ],
+        },
+      },
+    });
+
+    const consumed = await indexer.ConsumedResource.getAll();
+    expect(Object.fromEntries(consumed.map((entity) => [entity.nullifier, entity.index]))).toEqual({
+      [bytes32(0xa0)]: 0,
+      [bytes32(0xa1)]: 1,
+    });
+    const created = await indexer.CreatedResource.getAll();
+    expect(Object.fromEntries(created.map((entity) => [entity.commitment, entity.index]))).toEqual({
+      [bytes32(0xc0)]: 0,
+      [bytes32(0xc1)]: 1,
+    });
+    const [actionEntity] = await indexer.Action.getAll();
+    expect(new Set([...consumed, ...created].map((entity) => entity.action_id))).toEqual(
+      new Set([actionEntity.id])
+    );
+  });
+
   it("errors on a verifier without the root of its deployment", async () => {
     const indexer = createTestIndexer();
 
@@ -61,7 +93,7 @@ describe("ActionExecuted", () => {
       chains: {
         [CHAIN_ID]: {
           simulate: evmTransaction(2, [
-            action(bytes32(0xa0), bytes32(0xc0)),
+            action([bytes32(0xa0)], [bytes32(0xc0)]),
             ...executeEnd(ROOT_AFTER_TWO, bytes32(0xd0)),
           ]),
         },

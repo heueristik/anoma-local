@@ -23,6 +23,8 @@ pub enum Domain {
     SharedKey = 12,
     Keystream = 13,
     CiphertextTag = 14,
+    Nullifiers = 15,
+    CircuitKeys = 16,
 }
 
 /// Hashes the domain and the inputs with Poseidon2.

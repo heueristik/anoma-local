@@ -1,6 +1,6 @@
-use anoma_arm::action::Action;
+use anoma_arm::action::{Action, ResourceInstance};
 use anoma_arm::app_data::AppData;
-use anoma_arm::delta::unit_delta;
+use anoma_arm::delta::{ResourceDelta, unit_delta};
 use anoma_arm::kind::Kind;
 use anoma_arm::resource::NullifierKey;
 use anoma_arm::{Fr, Scalar};
@@ -40,22 +40,39 @@ fn payload() -> Payload<GrumpkinAddress> {
 /// The action that gives up `quantity` of the offered kind and creates the intent, with empty proofs.
 fn giving_action(payload: &Payload<GrumpkinAddress>, quantity: u128) -> ProvedAction {
     let intent = payload.intent(Fr::from(INTENT_LOGIC_REF));
-    let offer = Kind::new(payload.offer.logic_ref, payload.offer.label_ref).base;
-    let intent_kind = Kind::new(intent.logic_ref, intent.label_ref).base;
+    let resource = |is_consumed, tag, logic_ref| ResourceInstance {
+        is_consumed,
+        tag,
+        logic_ref,
+        commitment_tree_root: Fr::from(0u64),
+        app_data: AppData::default(),
+    };
+    let delta = |logic_ref, label_ref, quantity, is_consumed| ResourceDelta {
+        kind_base: Kind::new(logic_ref, label_ref).base,
+        quantity,
+        is_consumed,
+    };
     ProvedAction {
         action: Action {
-            nullifier: Fr::from(12u64),
-            consumed_logic_ref: payload.offer.logic_ref,
-            consumed_app_data: AppData::default(),
-            commitment: intent.commitment(),
-            created_logic_ref: intent.logic_ref,
-            created_app_data: AppData::default(),
-            commitment_tree_root: Fr::from(0u64),
+            resources: vec![
+                resource(true, Fr::from(12u64), payload.offer.logic_ref),
+                resource(false, intent.commitment(), intent.logic_ref),
+            ],
         },
-        delta: unit_delta(offer, quantity, intent_kind, 1, payload.rcv_total),
+        delta: unit_delta(
+            &[
+                delta(
+                    payload.offer.logic_ref,
+                    payload.offer.label_ref,
+                    quantity,
+                    true,
+                ),
+                delta(intent.logic_ref, intent.label_ref, 1, false),
+            ],
+            payload.rcv_total,
+        ),
         compliance_proof: Proof::default(),
-        consumed_logic_proof: LogicProof::default(),
-        created_logic_proof: LogicProof::default(),
+        logic_proofs: vec![LogicProof::default(); 2],
     }
 }
 
@@ -109,7 +126,7 @@ fn check_errors_on_actions_that_do_not_create_the_intent() {
     let payload = payload();
     let mut action = giving_action(&payload, payload.offer.quantity);
 
-    action.action.commitment += Fr::from(1u64);
+    action.action.resources[1].tag += Fr::from(1u64);
 
     assert_eq!(
         payload.check(&[action], Fr::from(INTENT_LOGIC_REF)),

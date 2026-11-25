@@ -1,6 +1,6 @@
 [package]
 name = "compliance"
-type = "bin"
+type = "lib"
 authors = ["Heueristik"]
 compiler_version = ">=1.0.0"
 

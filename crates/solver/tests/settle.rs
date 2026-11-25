@@ -53,7 +53,7 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
             &chain.deployment,
         )?)
         .await?;
-    let belt = belt(&mints);
+    let belt = belt(&mints)?;
 
     // Each party proves the action that gives up its minted token for an intent, and submits it to the pool.
     let mut pool = MemoryIntentPool::default();
@@ -106,7 +106,9 @@ async fn solve_settles_the_intents_that_balance_together_and_leaves_the_others_i
             .partial
             .actions
             .iter()
-            .all(|proved| proved.action.commitment_tree_root == belt.root()),
+            .flat_map(|proved| &proved.action.resources)
+            .filter(|resource| resource.is_consumed)
+            .all(|resource| resource.commitment_tree_root == belt.root()),
         "no action shows whether its consumed resource is ephemeral"
     );
 
@@ -148,7 +150,7 @@ fn solve_fills_a_copied_intent_once() -> anyhow::Result<()> {
         fixtures::mint(&apple, token(&apple, apples, &alice, 11)?, 21)?,
         fixtures::mint(&banana, token(&banana, bananas, &bob, 12)?, 22)?,
     ];
-    let belt = belt(&mints);
+    let belt = belt(&mints)?;
     let alice_actions = propose(
         &mints[0],
         belt.path(0)?,
@@ -197,7 +199,7 @@ fn solve_skips_an_intent_with_an_invalid_proof() -> anyhow::Result<()> {
         fixtures::mint(&banana, token(&banana, bananas, &bob, 12)?, 22)?,
         fixtures::mint(&apple, token(&apple, apples, &dave, 14)?, 24)?,
     ];
-    let belt = belt(&mints);
+    let belt = belt(&mints)?;
     let alice_actions = propose(
         &mints[0],
         belt.path(0)?,
@@ -259,7 +261,7 @@ fn solve_skips_an_intent_whose_payload_is_for_another_solver() -> anyhow::Result
         fixtures::mint(&banana, token(&banana, bananas, &bob, 12)?, 22)?,
         fixtures::mint(&apple, token(&apple, apples, &dave, 14)?, 24)?,
     ];
-    let belt = belt(&mints);
+    let belt = belt(&mints)?;
     let intents = [
         intent(
             "alice",
@@ -343,15 +345,15 @@ fn solver(owner: &Party) -> Solver<GrumpkinDiscovery, CpSatMatcher> {
 }
 
 /// The belt of the tokens that the mints create, in their order.
-fn belt(mints: &[ActionWitness]) -> Belt {
+fn belt(mints: &[ActionWitness]) -> anyhow::Result<Belt> {
     let mut belt = Belt::default();
     belt.append(
         &mints
             .iter()
-            .map(|mint| mint.created.commitment())
-            .collect::<Vec<_>>(),
+            .map(|mint| Ok(fixtures::first_created(mint)?.commitment()))
+            .collect::<anyhow::Result<Vec<_>>>()?,
     );
-    belt
+    Ok(belt)
 }
 
 /// The proved action of `owner` that gives up the token of `mint` at `path` for an intent that wants `want`, an issuer
@@ -366,7 +368,7 @@ fn propose(
     seed: u64,
 ) -> anyhow::Result<Vec<ProvedAction>> {
     fixtures::propose(
-        mint.created,
+        fixtures::first_created(mint)?,
         owner,
         path,
         fixtures::terms(want_issuer, want_quantity, owner, seed)?,
@@ -390,9 +392,11 @@ fn received_token(issuer: &Party, quantity: u128, owner: &Party) -> (Fr, u128, F
 fn received(actions: &[Action], keys: &GrumpkinSecretKeys) -> Vec<(Fr, u128, Fr)> {
     let mut received: Vec<(Fr, u128, Fr)> = actions
         .iter()
-        .filter_map(|action| {
+        .flat_map(|action| &action.resources)
+        .filter(|created| !created.is_consumed)
+        .filter_map(|created| {
             GrumpkinDiscovery
-                .discover(&action.created_app_data, keys)?
+                .discover(&created.app_data, keys)?
                 .iter()
                 .filter_map(|fields| {
                     Resource::from_fields(
@@ -400,7 +404,7 @@ fn received(actions: &[Action], keys: &GrumpkinSecretKeys) -> Vec<(Fr, u128, Fr)
                     )
                     .ok()
                 })
-                .find(|resource| resource.commitment() == action.commitment)
+                .find(|resource| resource.commitment() == created.tag)
         })
         .map(|resource| {
             (

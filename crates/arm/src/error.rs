@@ -19,4 +19,10 @@ pub enum Error {
     InvalidField(&'static str),
     #[error("{0} is not a BN254 scalar field element")]
     NotInField(String),
+    #[error(
+        "an action of {resource_count} resources has more than the {max} leaves of an action tree"
+    )]
+    TooManyResources { resource_count: usize, max: usize },
+    #[error("resource {index} is not in the action of {resource_count} resources")]
+    NotInAction { index: usize, resource_count: usize },
 }

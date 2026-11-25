@@ -46,9 +46,16 @@ async fn execute_settles_the_intent_example_after_several_composition_steps() ->
 
     // Each party proves its own action, which gives up its tokens for an intent, and gives Sally the intent.
     let alice_intent = Intent::new(&banana, 4, &alice, 101);
-    let alice_part = alice_intent.give_up(&belt, 0, alice_apples.created, &alice, 31)?;
+    let alice_part = alice_intent.give_up(
+        &belt,
+        0,
+        fixtures::first_created(&alice_apples)?,
+        &alice,
+        31,
+    )?;
     let bob_intent = Intent::new(&apple, 3, &bob, 102);
-    let bob_part = bob_intent.give_up(&belt, 1, bob_bananas.created, &bob, 32)?;
+    let bob_part =
+        bob_intent.give_up(&belt, 1, fixtures::first_created(&bob_bananas)?, &bob, 32)?;
 
     let composed = alice_part.partial.compose(bob_part.partial);
     assert!(!composed.is_balanced());
@@ -86,7 +93,8 @@ async fn execute_settles_the_intent_example_after_several_composition_steps() ->
         settlement
             .actions
             .iter()
-            .any(|action| action.commitment == alice_fill.commitment())
+            .flat_map(|action| action.commitments())
+            .any(|commitment| commitment == alice_fill.commitment())
     );
     Ok(())
 }
@@ -103,7 +111,9 @@ fn prove_errors_on_a_fill_with_another_quantity_than_the_terms() -> anyhow::Resu
         Fr::from(8u64),
     );
     let mut witness = intent.fill(&resource, Belt::default().root(), 41)?;
-    witness.created.quantity += 1;
+    for created in witness.created_mut() {
+        created.resource.quantity += 1;
+    }
 
     let result = action::prove(fixtures::circuit_prover(), &witness);
 
@@ -179,7 +189,7 @@ impl Intent {
             }),
             rcv,
         )?;
-        let resource = witness.created;
+        let resource = fixtures::first_created(&witness)?;
         Ok(Part {
             partial: action::prove(fixtures::circuit_prover(), &witness)?,
             resource,
@@ -219,15 +229,19 @@ async fn execute(chain: &Chain, belt: &mut Belt, transaction: &Transaction) -> a
     let commitments: Vec<Fr> = transaction
         .actions
         .iter()
-        .map(|action| action.commitment)
+        .flat_map(|action| action.commitments())
         .collect();
     belt.append(&commitments);
     assert_eq!(
         chain.verifier.latestCommitmentTreeRoot().call().await?,
         word(belt.root())
     );
-    for action in &transaction.actions {
-        let nullifier = word(action.nullifier);
+    for nullifier in transaction
+        .actions
+        .iter()
+        .flat_map(|action| action.nullifiers())
+    {
+        let nullifier = word(nullifier);
         assert!(
             chain
                 .verifier

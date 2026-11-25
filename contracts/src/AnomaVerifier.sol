@@ -64,12 +64,12 @@ contract AnomaVerifier is IAnomaVerifier, ReentrancyGuardTransient {
         if (actionCount == 0) revert EmptyTransactionNotAllowed();
 
         bytes32 actionDigest = bytes32(0);
-        bytes32[] memory commitments = new bytes32[](actionCount);
+        // The compliance circuit makes the commitments unique, since it derives them from unique nullifiers.
+        bytes32[] memory commitments = new bytes32[](_createdCount(actions));
+        uint256 commitmentIndex = 0;
         for (uint256 i = 0; i < actionCount; ++i) {
             Action calldata action = actions[i];
-            _processAction(action);
-            // The compliance circuit makes the commitments unique, since it derives them from unique nullifiers.
-            commitments[i] = action.created.tag;
+            commitmentIndex = _processAction({action: action, commitments: commitments, firstIndex: commitmentIndex});
             actionDigest = ActionDigest.extend({digest: actionDigest, action: action});
         }
 
@@ -106,42 +106,85 @@ contract AnomaVerifier is IAnomaVerifier, ReentrancyGuardTransient {
         root = _commitmentTree.root();
     }
 
-    /// @notice Checks the root of an action, adds its nullifier, and emits its events.
+    /// @notice Adds the nullifiers of an action, writes its commitments into `commitments`, and emits its events.
     /// @param action The action.
-    function _processAction(Action calldata action) internal {
-        bytes32 root = action.commitmentTreeRoot;
-        // NOTE: One invalid action must revert the whole transaction.
-        // forge-lint: disable-next-item(require-revert-in-loop)
-        if (!_historicalRoots[root]) revert NonExistingRoot(root);
+    /// @param commitments The commitments of the transaction, in the order of its actions and their resources.
+    /// @param firstIndex The index in `commitments` of the first commitment of `action`.
+    /// @return nextIndex The index in `commitments` after the last commitment of `action`.
+    function _processAction(Action calldata action, bytes32[] memory commitments, uint256 firstIndex)
+        internal
+        returns (uint256 nextIndex)
+    {
+        Resource[] calldata resources = action.resources;
+        uint256 resourceCount = resources.length;
+        uint256 consumedCount = 0;
+        for (uint256 i = 0; i < resourceCount; ++i) {
+            if (resources[i].isConsumed) ++consumedCount;
+        }
+        bytes32[] memory nullifiers = new bytes32[](consumedCount);
+        bytes32[] memory consumedLogicRefs = new bytes32[](consumedCount);
+        bytes32[] memory actionCommitments = new bytes32[](resourceCount - consumedCount);
+        bytes32[] memory createdLogicRefs = new bytes32[](resourceCount - consumedCount);
 
-        bytes32 nullifier = action.consumed.tag;
-        // forge-lint: disable-next-item(require-revert-in-loop)
-        if (_nullifiers[nullifier]) revert PreExistingNullifier(nullifier);
-        _nullifiers[nullifier] = true;
+        uint256 consumedIndex = 0;
+        uint256 createdIndex = 0;
+        for (uint256 i = 0; i < resourceCount; ++i) {
+            Resource calldata resource = resources[i];
+            if (resource.isConsumed) {
+                _addNullifier(resource);
+                nullifiers[consumedIndex] = resource.tag;
+                consumedLogicRefs[consumedIndex] = resource.logicRef;
+                ++consumedIndex;
+            } else {
+                actionCommitments[createdIndex] = resource.tag;
+                createdLogicRefs[createdIndex] = resource.logicRef;
+                commitments[firstIndex + createdIndex] = resource.tag;
+                ++createdIndex;
+            }
+        }
+        nextIndex = firstIndex + createdIndex;
 
-        _emitAppDataBlobs(action.consumed);
-        _emitAppDataBlobs(action.created);
+        for (uint256 i = 0; i < resourceCount; ++i) {
+            _emitAppDataBlobs(resources[i]);
+        }
         emit ActionExecuted({
-            nullifier: nullifier,
-            commitment: action.created.tag,
-            consumedLogicRef: action.consumed.logicRef,
-            createdLogicRef: action.created.logicRef
+            nullifiers: nullifiers,
+            consumedLogicRefs: consumedLogicRefs,
+            commitments: actionCommitments,
+            createdLogicRefs: createdLogicRefs
         });
     }
 
-    /// @notice Makes the forwarder calls of all resources, in the order of the actions, the consumed resource first.
+    /// @notice Checks the root of a consumed resource and adds its nullifier.
+    /// @param resource The consumed resource.
+    function _addNullifier(Resource calldata resource) internal {
+        bytes32 root = resource.commitmentTreeRoot;
+        // NOTE: One invalid resource must revert the whole transaction.
+        // forge-lint: disable-next-item(require-revert-in-loop)
+        if (!_historicalRoots[root]) revert NonExistingRoot(root);
+
+        bytes32 nullifier = resource.tag;
+        // forge-lint: disable-next-item(require-revert-in-loop)
+        if (_nullifiers[nullifier]) revert PreExistingNullifier(nullifier);
+        _nullifiers[nullifier] = true;
+    }
+
+    /// @notice Makes the forwarder calls of all resources, in the order of the actions and their resources.
     /// @param actions The actions of the transaction.
     function _executeForwarderCalls(Action[] calldata actions) internal {
         uint256 actionCount = actions.length;
         for (uint256 i = 0; i < actionCount; ++i) {
-            _executeForwarderCalls(actions[i].consumed);
-            _executeForwarderCalls(actions[i].created);
+            Resource[] calldata resources = actions[i].resources;
+            uint256 resourceCount = resources.length;
+            for (uint256 j = 0; j < resourceCount; ++j) {
+                _executeForwarderCalls(resources[j]);
+            }
         }
     }
 
     /// @notice Makes the forwarder calls of one resource, in the order of its external payload.
     /// @param resource The resource that carries the calls.
-    function _executeForwarderCalls(ResourceInstance calldata resource) internal {
+    function _executeForwarderCalls(Resource calldata resource) internal {
         ExpirableBlob[] calldata calls = resource.appData.externalPayload;
         uint256 callCount = calls.length;
         for (uint256 i = 0; i < callCount; ++i) {
@@ -173,7 +216,7 @@ contract AnomaVerifier is IAnomaVerifier, ReentrancyGuardTransient {
 
     /// @notice Emits the blobs of a resource whose deletion criterion is `Never`.
     /// @param resource The resource.
-    function _emitAppDataBlobs(ResourceInstance calldata resource) internal {
+    function _emitAppDataBlobs(Resource calldata resource) internal {
         bytes32 tag = resource.tag;
         ExpirableBlob[] calldata payload = resource.appData.resourcePayload;
         uint256 blobCount = payload.length;
@@ -213,5 +256,19 @@ contract AnomaVerifier is IAnomaVerifier, ReentrancyGuardTransient {
     function _addCommitmentTreeRoot(bytes32 root) internal {
         _historicalRoots[root] = true;
         emit CommitmentTreeRootAdded({root: root});
+    }
+
+    /// @notice Counts the created resources of a transaction.
+    /// @param actions The actions of the transaction.
+    /// @return count The number of created resources.
+    function _createdCount(Action[] calldata actions) internal pure returns (uint256 count) {
+        uint256 actionCount = actions.length;
+        for (uint256 i = 0; i < actionCount; ++i) {
+            Resource[] calldata resources = actions[i].resources;
+            uint256 resourceCount = resources.length;
+            for (uint256 j = 0; j < resourceCount; ++j) {
+                if (!resources[j].isConsumed) ++count;
+            }
+        }
     }
 }

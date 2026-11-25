@@ -15,28 +15,30 @@ library ActionDigest {
     /// @notice Keeps the low 253 bits of a hash, so that the result is smaller than the BN254 scalar field modulus.
     uint256 internal constant _FIELD_MASK = (uint256(1) << 253) - 1;
 
+    /// @notice The number of fields that each resource adds to the hash of `extend`.
+    uint256 internal constant _RESOURCE_FIELDS = 5;
+
     /// @notice Extends a digest with an action.
     /// @param digest The digest of the actions before `action`, or zero for the first action.
     /// @param action The action.
-    /// @return extended The low 253 bits of the SHA-256 hash of the ABI encoding of `digest` and the fields of
-    /// `action`, in their order, with each app data replaced by its hash.
+    /// @return extended The low 253 bits of the SHA-256 hash of `digest`, then for each resource in the order of the
+    /// action its `isConsumed` flag, tag, logic reference, commitment tree root and app data hash, each as 32 bytes.
     function extend(bytes32 digest, IAnomaVerifier.Action calldata action) internal pure returns (bytes32 extended) {
-        IAnomaVerifier.ResourceInstance calldata consumed = action.consumed;
-        IAnomaVerifier.ResourceInstance calldata created = action.created;
-        extended = _low253Bits(
-            sha256(
-                abi.encode(
-                    digest,
-                    consumed.tag,
-                    consumed.logicRef,
-                    appDataHash(consumed.appData),
-                    created.tag,
-                    created.logicRef,
-                    appDataHash(created.appData),
-                    action.commitmentTreeRoot
-                )
-            )
-        );
+        IAnomaVerifier.Resource[] calldata resources = action.resources;
+        uint256 resourceCount = resources.length;
+        bytes32[] memory fields = new bytes32[](1 + _RESOURCE_FIELDS * resourceCount);
+        fields[0] = digest;
+        for (uint256 i = 0; i < resourceCount; ++i) {
+            IAnomaVerifier.Resource calldata resource = resources[i];
+            uint256 first = 1 + _RESOURCE_FIELDS * i;
+            fields[first] = resource.isConsumed ? bytes32(uint256(1)) : bytes32(0);
+            fields[first + 1] = resource.tag;
+            fields[first + 2] = resource.logicRef;
+            fields[first + 3] = resource.commitmentTreeRoot;
+            fields[first + 4] = appDataHash(resource.appData);
+        }
+        // The packed encoding of a `bytes32` array is its elements, without a length.
+        extended = _low253Bits(sha256(abi.encodePacked(fields)));
     }
 
     /// @notice Binds an action digest to one chain and one AnomaVerifier, so that the proof of a transaction verifies

@@ -1,6 +1,6 @@
 //! What a party gives the solvers with an intent, in the resource payload of the intent resource.
 
-use anoma_arm::delta::unit_delta;
+use anoma_arm::delta::{ResourceDelta, unit_delta};
 use anoma_arm::field::{scalar_from_limbs, scalar_limbs, to_u128};
 use anoma_arm::kind::Kind;
 use anoma_arm::resource::{NullifierKey, Resource};
@@ -130,10 +130,12 @@ impl<A> Payload<A> {
     ) -> Result<PartialTransaction, Mismatch> {
         let intent = self.intent(intent_logic_ref);
         let commitment = intent.commitment();
-        if !actions
-            .iter()
-            .any(|proved| proved.action.commitment == commitment)
-        {
+        if !actions.iter().any(|proved| {
+            proved
+                .action
+                .commitments()
+                .any(|created| created == commitment)
+        }) {
             return Err(Mismatch::NotCreated);
         }
         let partial = PartialTransaction {
@@ -141,10 +143,18 @@ impl<A> Payload<A> {
             rcv_total: self.rcv_total,
         };
         let expected = unit_delta(
-            Kind::new(self.offer.logic_ref, self.offer.label_ref).base,
-            self.offer.quantity,
-            Kind::new(intent.logic_ref, intent.label_ref).base,
-            intent.quantity,
+            &[
+                ResourceDelta {
+                    kind_base: Kind::new(self.offer.logic_ref, self.offer.label_ref).base,
+                    quantity: self.offer.quantity,
+                    is_consumed: true,
+                },
+                ResourceDelta {
+                    kind_base: Kind::new(intent.logic_ref, intent.label_ref).base,
+                    quantity: intent.quantity,
+                    is_consumed: false,
+                },
+            ],
             self.rcv_total,
         );
         if partial.delta() != expected {

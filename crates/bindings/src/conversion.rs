@@ -2,8 +2,8 @@
 
 use alloy::primitives::{B256, Bytes};
 use anoma_arm::Fr;
-use anoma_arm::action::Action;
-use anoma_arm::app_data::{AppData, Blob};
+use anoma_arm::action::{Action, ResourceInstance};
+use anoma_arm::app_data::Blob;
 use anoma_arm::field::to_bytes;
 
 use crate::generated::anoma_verifier::IAnomaVerifier;
@@ -18,17 +18,7 @@ pub fn transaction(actions: &[Action], proof: &[u8]) -> IAnomaVerifier::Transact
 
 pub fn action(action: &Action) -> IAnomaVerifier::Action {
     IAnomaVerifier::Action {
-        consumed: resource_instance(
-            action.nullifier,
-            action.consumed_logic_ref,
-            &action.consumed_app_data,
-        ),
-        created: resource_instance(
-            action.commitment,
-            action.created_logic_ref,
-            &action.created_app_data,
-        ),
-        commitmentTreeRoot: word(action.commitment_tree_root),
+        resources: action.resources.iter().map(resource).collect(),
     }
 }
 
@@ -37,14 +27,13 @@ pub fn word(value: Fr) -> B256 {
     B256::from(to_bytes(value))
 }
 
-fn resource_instance(
-    tag: Fr,
-    logic_ref: Fr,
-    app_data: &AppData,
-) -> IAnomaVerifier::ResourceInstance {
-    IAnomaVerifier::ResourceInstance {
-        tag: word(tag),
-        logicRef: word(logic_ref),
+fn resource(resource: &ResourceInstance) -> IAnomaVerifier::Resource {
+    let app_data = &resource.app_data;
+    IAnomaVerifier::Resource {
+        isConsumed: resource.is_consumed,
+        tag: word(resource.tag),
+        logicRef: word(resource.logic_ref),
+        commitmentTreeRoot: word(resource.commitment_tree_root),
         appData: IAnomaVerifier::AppData {
             resourcePayload: blobs(&app_data.resource_payload),
             discoveryPayload: blobs(&app_data.discovery_payload),

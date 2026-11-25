@@ -5,17 +5,26 @@ use ark_ec::{AffineRepr, CurveGroup};
 
 use crate::{Point, Scalar};
 
-/// The consumed quantity times its kind base, minus the created quantity times its kind base, plus `rcv` times the
+/// The share of one resource in the delta of its compliance unit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ResourceDelta {
+    pub kind_base: Point,
+    pub quantity: u128,
+    pub is_consumed: bool,
+}
+
+/// Each consumed quantity times its kind base, minus each created quantity times its kind base, plus `rcv` times the
 /// generator.
-pub fn unit_delta(
-    consumed_kind: Point,
-    consumed_quantity: u128,
-    created_kind: Point,
-    created_quantity: u128,
-    rcv: Scalar,
-) -> Point {
-    (consumed_kind * Scalar::from(consumed_quantity)
-        - created_kind * Scalar::from(created_quantity)
-        + Point::generator() * rcv)
+pub fn unit_delta(resources: &[ResourceDelta], rcv: Scalar) -> Point {
+    resources
+        .iter()
+        .fold(Point::generator() * rcv, |sum, resource| {
+            let share = resource.kind_base * Scalar::from(resource.quantity);
+            if resource.is_consumed {
+                sum + share
+            } else {
+                sum - share
+            }
+        })
         .into_affine()
 }

@@ -1,7 +1,10 @@
-//! Measures the time of each proof of a wrap, a transfer and an unwrap without fees, and of a transfer with change, and
-//! prints the medians as a Markdown table. It needs the compiled circuits, nargo and bb, as the slow tests do.
+//! Measures the time of each proof of a wrap, a transfer and an unwrap without fees, of a transfer with change, and of a
+//! split of one token into three, and prints the medians as a Markdown table. It needs the compiled circuits, nargo and
+//! bb, as the slow tests do.
 
 use std::cell::{Cell, RefCell};
+use std::collections::BTreeSet;
+use std::fmt;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -22,14 +25,45 @@ use anyhow::Context;
 /// The number of times that each transaction is proved. The first proof of a process also reads the keys.
 const ROUNDS: usize = 3;
 
-/// The names of the proofs of an action, in the order that `action::prove` makes them.
-const ACTION_PROOFS: [&str; 3] = ["compliance", "consumed logic", "created logic"];
+/// A row of the table. The order of the variants and their fields is the order of the rows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Row {
+    Action { action: usize, proof: ActionProof },
+    Root,
+    Wrap,
+    Total,
+}
+
+/// A proof of one action: its leaf proofs in the order that `action::prove` makes them, then its step proof.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum ActionProof {
+    Compliance,
+    Logic { resource: usize },
+    Step,
+}
+
+impl fmt::Display for Row {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Action { action, proof } => match proof {
+                ActionProof::Compliance => write!(formatter, "Action {action} compliance"),
+                ActionProof::Logic { resource } => {
+                    write!(formatter, "Action {action} logic of resource {resource}")
+                }
+                ActionProof::Step => write!(formatter, "Action {action} step"),
+            },
+            Self::Root => write!(formatter, "Root"),
+            Self::Wrap => write!(formatter, "Groth16 wrap"),
+            Self::Total => write!(formatter, "**Total**"),
+        }
+    }
+}
 
 fn main() -> anyhow::Result<()> {
     let wrapper =
         fixtures::groth16_wrapper(&PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("wrap-keys"))?;
     let transactions = transactions()?;
-    let mut rounds: Vec<Vec<Vec<(String, Duration)>>> = vec![Vec::new(); transactions.len()];
+    let mut rounds: Vec<Vec<Vec<(Row, Duration)>>> = vec![Vec::new(); transactions.len()];
     for round in 0..ROUNDS {
         for ((name, witnesses), times) in transactions.iter().zip(&mut rounds) {
             times.push(
@@ -44,15 +78,17 @@ fn main() -> anyhow::Result<()> {
         transactions.each_ref().map(|(name, _)| *name).join(" | ")
     );
     println!("| --- |{}", " --- |".repeat(transactions.len()));
-    let longest = rounds
+    let rows: BTreeSet<Row> = rounds
         .iter()
-        .max_by_key(|times| times[0].len())
-        .expect("there are transactions");
-    for (proof, _) in &longest[0] {
+        .flatten()
+        .flatten()
+        .map(|&(row, _)| row)
+        .collect();
+    for row in rows {
         let medians = rounds.iter().map(|times| {
             let mut values: Vec<Duration> = times
                 .iter()
-                .filter_map(|round| round.iter().find(|(name, _)| name == proof))
+                .filter_map(|round| round.iter().find(|&&(name, _)| name == row))
                 .map(|&(_, time)| time)
                 .collect();
             values.sort();
@@ -62,21 +98,25 @@ fn main() -> anyhow::Result<()> {
                     format!("{:.2}", median.as_secs_f64())
                 })
         });
-        println!("| {proof} | {} |", medians.collect::<Vec<_>>().join(" | "));
+        println!("| {row} | {} |", medians.collect::<Vec<_>>().join(" | "));
     }
     Ok(())
 }
 
 /// The transactions: their names, and the witnesses of their actions.
-fn transactions() -> anyhow::Result<[(&'static str, Vec<ActionWitness>); 4]> {
+fn transactions() -> anyhow::Result<[(&'static str, Vec<ActionWitness>); 5]> {
     let [alice, bob, issuer] = [1u64, 2, 1001].map(Party::new);
     let wrap = fixtures::mint(&issuer, token(&issuer, 5, &alice, 11)?, 21)?;
     let held = fixtures::mint(&issuer, token(&issuer, 5, &alice, 12)?, 22)?;
     let mut belt = Belt::default();
-    belt.append(&[wrap.created.commitment(), held.created.commitment()]);
+    let held_token = fixtures::first_created(&held)?;
+    belt.append(&[
+        fixtures::first_created(&wrap)?.commitment(),
+        held_token.commitment(),
+    ]);
     let spend_held = |created: Resource, rcv: u64| {
         fixtures::action(
-            held.created,
+            held_token,
             alice.token_logic(),
             alice.nullifier_key,
             Membership::Persistent(belt.path(1)?),
@@ -103,11 +143,25 @@ fn transactions() -> anyhow::Result<[(&'static str, Vec<ActionWitness>); 4]> {
         belt.root(),
         Scalar::from(26u64),
     )?;
+    let split = fixtures::split(
+        held_token,
+        alice.token_logic(),
+        alice.nullifier_key,
+        Membership::Persistent(belt.path(1)?),
+        &[
+            token(&issuer, 1, &bob, 17)?,
+            token(&issuer, 2, &bob, 18)?,
+            token(&issuer, 2, &bob, 19)?,
+        ],
+        bob.token_logic(),
+        27,
+    )?;
     Ok([
         ("Wrap", vec![wrap]),
         ("Transfer", vec![transfer]),
         ("Unwrap", vec![unwrap]),
         ("Transfer with change", vec![partial_transfer, change]),
+        ("Split into three", vec![split]),
     ])
 }
 
@@ -115,7 +169,7 @@ fn transactions() -> anyhow::Result<[(&'static str, Vec<ActionWitness>); 4]> {
 fn prove_times(
     wrapper: &Groth16Wrapper,
     witnesses: &[ActionWitness],
-) -> anyhow::Result<Vec<(String, Duration)>> {
+) -> anyhow::Result<Vec<(Row, Duration)>> {
     let prover = TimedProver {
         inner: fixtures::circuit_prover(),
         times: RefCell::default(),
@@ -137,34 +191,34 @@ fn prove_times(
     transaction::prove(&prover, &timed_wrapper, &partial, &deployment)?;
     let total = start.elapsed();
 
-    let leaf_proofs = witnesses.len() * ACTION_PROOFS.len();
-    let mut times: Vec<(String, Duration)> = prover
-        .times
-        .into_inner()
-        .into_iter()
-        .enumerate()
-        .map(|(index, (circuit, time))| {
-            let proof = if index < leaf_proofs {
-                format!(
-                    "Action {} {} (`{circuit}`)",
-                    index / ACTION_PROOFS.len(),
-                    ACTION_PROOFS[index % ACTION_PROOFS.len()]
-                )
-            } else {
-                format!("`{circuit}`")
-            };
-            (proof, time)
-        })
-        .collect();
-    times.push(("Groth16 wrap".to_string(), timed_wrapper.time.get()));
-    times.push(("**Total**".to_string(), total));
+    // The prover makes the leaf proofs of each action, then one step proof for each action, then the root proof.
+    let leaf_rows = witnesses.iter().enumerate().flat_map(|(action, witness)| {
+        std::iter::once(ActionProof::Compliance)
+            .chain((0..witness.resources.len()).map(|resource| ActionProof::Logic { resource }))
+            .map(move |proof| Row::Action { action, proof })
+    });
+    let step_rows = (0..witnesses.len()).map(|action| Row::Action {
+        action,
+        proof: ActionProof::Step,
+    });
+    let rows: Vec<Row> = leaf_rows.chain(step_rows).chain([Row::Root]).collect();
+    let proof_times = prover.times.into_inner();
+    anyhow::ensure!(
+        proof_times.len() == rows.len(),
+        "the prover made {} proofs, expected {}",
+        proof_times.len(),
+        rows.len()
+    );
+    let mut times: Vec<(Row, Duration)> = rows.into_iter().zip(proof_times).collect();
+    times.push((Row::Wrap, timed_wrapper.time.get()));
+    times.push((Row::Total, total));
     Ok(times)
 }
 
 /// A circuit prover that records the time of each proof of the circuit prover that it holds.
 struct TimedProver<'a> {
     inner: &'a dyn CircuitProver,
-    times: RefCell<Vec<(String, Duration)>>,
+    times: RefCell<Vec<Duration>>,
 }
 
 impl CircuitProver for TimedProver<'_> {
@@ -180,9 +234,7 @@ impl CircuitProver for TimedProver<'_> {
     ) -> Result<Proof, CircuitError> {
         let start = Instant::now();
         let proof = self.inner.prove(circuit, inputs, target)?;
-        self.times
-            .borrow_mut()
-            .push((circuit.to_string(), start.elapsed()));
+        self.times.borrow_mut().push(start.elapsed());
         Ok(proof)
     }
 

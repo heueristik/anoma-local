@@ -22,24 +22,24 @@ interface IAnomaVerifier {
         bytes proof;
     }
 
-    /// @notice An action: one compliance unit, which consumes one resource and creates one resource.
-    /// @param consumed The consumed resource, whose tag is its nullifier.
-    /// @param created The created resource, whose tag is its commitment.
-    /// @param commitmentTreeRoot The historical commitment tree root that the membership proof of the consumed resource
-    /// uses.
+    /// @notice An action: one compliance unit of 1 to 8 resources, of which at least one is consumed.
+    /// @param resources The resources in the order of the compliance unit, which also orders the forwarder calls.
     struct Action {
-        ResourceInstance consumed;
-        ResourceInstance created;
-        bytes32 commitmentTreeRoot;
+        Resource[] resources;
     }
 
-    /// @notice The public data of one resource.
+    /// @notice The public data of one resource of an action.
+    /// @param isConsumed Whether the action consumes or creates the resource.
     /// @param tag The nullifier of a consumed resource or the commitment of a created resource.
     /// @param logicRef The hash of the verifying key of the resource logic.
+    /// @param commitmentTreeRoot The historical commitment tree root that the membership proof of a consumed resource
+    /// uses, or zero for a created resource.
     /// @param appData The application data of the resource.
-    struct ResourceInstance {
+    struct Resource {
+        bool isConsumed;
         bytes32 tag;
         bytes32 logicRef;
+        bytes32 commitmentTreeRoot;
         AppData appData;
     }
 
@@ -69,12 +69,12 @@ interface IAnomaVerifier {
     event TransactionExecuted(bytes32 indexed actionDigest);
 
     /// @notice Emitted when an action is executed.
-    /// @param nullifier The nullifier of the consumed resource.
-    /// @param commitment The commitment of the created resource.
-    /// @param consumedLogicRef The logic reference of the consumed resource.
-    /// @param createdLogicRef The logic reference of the created resource.
+    /// @param nullifiers The nullifiers of the consumed resources, in the order of the action.
+    /// @param consumedLogicRefs The logic references of the consumed resources, in the same order.
+    /// @param commitments The commitments of the created resources, in the order of the action.
+    /// @param createdLogicRefs The logic references of the created resources, in the same order.
     event ActionExecuted(
-        bytes32 indexed nullifier, bytes32 indexed commitment, bytes32 consumedLogicRef, bytes32 createdLogicRef
+        bytes32[] nullifiers, bytes32[] consumedLogicRefs, bytes32[] commitments, bytes32[] createdLogicRefs
     );
 
     /// @notice Emitted when a forwarder call is executed.
@@ -112,7 +112,8 @@ interface IAnomaVerifier {
     event ApplicationPayload(bytes32 indexed tag, uint256 index, bytes blob);
 
     /// @notice Adds the nullifiers, verifies the proof against the action digest bound to this chain and this contract,
-    /// appends the commitments to the commitment tree, and then makes the forwarder calls.
+    /// appends the commitments to the commitment tree, and then makes the forwarder calls in the order of the actions
+    /// and their resources.
     /// @param transaction The transaction.
     function execute(Transaction calldata transaction) external;
 

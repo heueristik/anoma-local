@@ -83,9 +83,11 @@ impl<D: Discovery, M: Matcher> Solver<D, M> {
                 intent
                     .actions
                     .iter()
-                    .filter_map(|proved| {
+                    .flat_map(|proved| &proved.action.resources)
+                    .filter(|resource| !resource.is_consumed)
+                    .filter_map(|resource| {
                         self.discovery
-                            .discover(&proved.action.created_app_data, &self.secret_keys)
+                            .discover(&resource.app_data, &self.secret_keys)
                     })
                     .flatten()
                     .filter_map(|fields| Payload::<D::Address>::from_fields(&fields))
@@ -168,7 +170,9 @@ impl<D: Discovery, M: Matcher> Solver<D, M> {
             commitment_tree_root,
             Scalar::rand(&mut OsRng),
         )?;
-        witness.created_app_data = self.app_data(&payload.receiver, &witness.created)?;
+        for created in witness.created_mut() {
+            created.app_data = self.app_data(&payload.receiver, &created.resource)?;
+        }
         Ok(witness)
     }
 
@@ -197,8 +201,10 @@ impl<D: Discovery, M: Matcher> Solver<D, M> {
             commitment_tree_root,
             Scalar::rand(&mut OsRng),
         )?;
-        witness.created_app_data =
-            self.app_data(&self.discovery.address(&self.secret_keys), &witness.created)?;
+        let address = self.discovery.address(&self.secret_keys);
+        for created in witness.created_mut() {
+            created.app_data = self.app_data(&address, &created.resource)?;
+        }
         Ok(witness)
     }
 
@@ -214,9 +220,11 @@ impl<D: Discovery, M: Matcher> Solver<D, M> {
 /// nullifier makes the contract revert the whole transaction.
 fn has_fresh_nullifiers(partial: &PartialTransaction, seen: &mut BTreeSet<Fr>) -> bool {
     let mut own = BTreeSet::new();
-    let fresh = partial.actions.iter().all(|proved| {
-        !seen.contains(&proved.action.nullifier) && own.insert(proved.action.nullifier)
-    });
+    let fresh = partial
+        .actions
+        .iter()
+        .flat_map(|proved| proved.action.nullifiers())
+        .all(|nullifier| !seen.contains(&nullifier) && own.insert(nullifier));
     if fresh {
         seen.append(&mut own);
     }

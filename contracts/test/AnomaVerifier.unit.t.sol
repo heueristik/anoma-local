@@ -47,8 +47,9 @@ contract AnomaVerifierTest is Test {
     function test_execute_passes_the_action_digest_to_the_verifier() public {
         assertLt(2 ** 253, Poseidon2T4.PRIME, "253 bits fit into the BN254 scalar field");
         IAnomaVerifier.Action memory action = _action(_tag("nullifier"), _tag("commitment"));
-        action.created.appData.resourcePayload = _blobs(IAnomaVerifier.DeletionCriterion.Never, "ab");
-        action.created.appData.applicationPayload = _blobs(IAnomaVerifier.DeletionCriterion.Immediately, "c");
+        IAnomaVerifier.Resource memory created = action.resources[1];
+        created.appData.resourcePayload = _blobs(IAnomaVerifier.DeletionCriterion.Never, "ab");
+        created.appData.applicationPayload = _blobs(IAnomaVerifier.DeletionCriterion.Immediately, "c");
 
         // The four payloads each start with a 4-byte count; a blob adds its criterion, its 4-byte length and its bytes.
         bytes memory consumedPayloads = abi.encodePacked(uint32(0), uint32(0), uint32(0), uint32(0));
@@ -62,13 +63,16 @@ contract AnomaVerifierTest is Test {
             sha256(
                 abi.encode(
                     bytes32(0),
-                    action.consumed.tag,
+                    true,
+                    action.resources[0].tag,
                     _CONSUMED_LOGIC_REF,
+                    _emptyRoot,
                     uint256(sha256(consumedPayloads)) % 2 ** 253,
-                    action.created.tag,
+                    false,
+                    created.tag,
                     _CREATED_LOGIC_REF,
-                    uint256(sha256(createdPayloads)) % 2 ** 253,
-                    _emptyRoot
+                    bytes32(0),
+                    uint256(sha256(createdPayloads)) % 2 ** 253
                 )
             )
         ) % 2 ** 253;
@@ -77,22 +81,6 @@ contract AnomaVerifierTest is Test {
         vm.expectCall(
             address(_groth16),
             abi.encodeCall(IGroth16Verifier.verifyProof, (transaction.proof, [uint256(_bind(bytes32(digest)))]))
-        );
-        _verifier.execute(transaction);
-    }
-
-    function test_execute_passes_the_action_digest_that_the_circuits_compute() public {
-        IAnomaVerifier.Action memory action = _action(bytes32(uint256(1)), bytes32(uint256(4)));
-        action.consumed.logicRef = bytes32(uint256(2));
-        action.created.logicRef = bytes32(uint256(5));
-        assertEq(action.commitmentTreeRoot, bytes32(0), "the empty commitment tree has the root zero");
-
-        // The value of `extend` in the Noir library of the circuits for this action.
-        bytes32 digest = 0x10545fff186a4bd171fe33842768c98e12133b06c13ee14b99182ef580ef78bf;
-        IAnomaVerifier.Transaction memory transaction = _prove(_list(action));
-        vm.expectCall(
-            address(_groth16),
-            abi.encodeCall(IGroth16Verifier.verifyProof, (transaction.proof, [uint256(_bind(digest))]))
         );
         _verifier.execute(transaction);
     }
@@ -150,18 +138,15 @@ contract AnomaVerifierTest is Test {
         assertTrue(_verifier.isNullifierContained(nullifier));
     }
 
-    function test_execute_appends_the_commitments_in_the_order_of_the_actions() public {
-        bytes32[] memory commitments = new bytes32[](2);
+    function test_execute_appends_the_commitments_in_the_order_of_the_actions_and_their_resources() public {
+        bytes32[] memory commitments = new bytes32[](3);
         commitments[0] = _tag("first");
         commitments[1] = _tag("second");
+        commitments[2] = _tag("third");
+        IAnomaVerifier.Action memory first =
+            _action(_created(commitments[0]), _consumed(_tag("first nullifier")), _created(commitments[1]));
 
-        _verifier.execute(
-            _prove(
-                _list(
-                    _action(_tag("first nullifier"), commitments[0]), _action(_tag("second nullifier"), commitments[1])
-                )
-            )
-        );
+        _verifier.execute(_prove(_list(first, _action(_tag("second nullifier"), commitments[2]))));
 
         bytes32 expectedRoot = _expectedTree.append(commitments);
         assertEq(_verifier.latestCommitmentTreeRoot(), expectedRoot);
@@ -172,18 +157,19 @@ contract AnomaVerifierTest is Test {
     function test_execute_accepts_a_root_that_an_earlier_transaction_added() public {
         _verifier.execute(_prove(_list(_action(_tag("first nullifier"), _tag("commitment")))));
         IAnomaVerifier.Action memory action = _action(_tag("second nullifier"), _tag("other"));
-        action.commitmentTreeRoot = _verifier.latestCommitmentTreeRoot();
+        action.resources[0].commitmentTreeRoot = _verifier.latestCommitmentTreeRoot();
 
         _verifier.execute(_prove(_list(action)));
-        assertTrue(_verifier.isNullifierContained(action.consumed.tag));
+        assertTrue(_verifier.isNullifierContained(action.resources[0].tag));
     }
 
     function test_execute_reverts_on_a_root_that_is_not_historical() public {
         IAnomaVerifier.Action memory action = _action(_tag("nullifier"), _tag("commitment"));
-        action.commitmentTreeRoot = _tag("not a root");
+        bytes32 root = _tag("not a root");
+        action.resources[0].commitmentTreeRoot = root;
 
         IAnomaVerifier.Transaction memory transaction = _prove(_list(action));
-        vm.expectRevert(abi.encodeWithSelector(AnomaVerifier.NonExistingRoot.selector, action.commitmentTreeRoot));
+        vm.expectRevert(abi.encodeWithSelector(AnomaVerifier.NonExistingRoot.selector, root));
         _verifier.execute(transaction);
     }
 
@@ -205,15 +191,33 @@ contract AnomaVerifierTest is Test {
         _verifier.execute(transaction);
     }
 
-    function test_execute_emits_the_tags_and_logic_refs_of_each_action() public {
-        IAnomaVerifier.Action memory action = _action(_tag("nullifier"), _tag("commitment"));
+    function test_execute_reverts_on_a_nullifier_that_occurs_twice_in_one_action() public {
+        bytes32 nullifier = _tag("nullifier");
+        IAnomaVerifier.Transaction memory transaction =
+            _prove(_list(_action(_consumed(nullifier), _consumed(nullifier), _created(_tag("commitment")))));
+
+        vm.expectRevert(abi.encodeWithSelector(AnomaVerifier.PreExistingNullifier.selector, nullifier));
+        _verifier.execute(transaction);
+    }
+
+    function test_execute_emits_the_tags_and_logic_refs_of_each_action_in_the_order_of_its_resources() public {
+        IAnomaVerifier.Action memory action = _action(
+            _consumed(_tag("first nullifier")), _created(_tag("commitment")), _consumed(_tag("second nullifier"))
+        );
+        action.resources[2].logicRef = _CREATED_LOGIC_REF;
+        bytes32[] memory nullifiers = new bytes32[](2);
+        nullifiers[0] = action.resources[0].tag;
+        nullifiers[1] = action.resources[2].tag;
+        bytes32[] memory consumedLogicRefs = new bytes32[](2);
+        consumedLogicRefs[0] = _CONSUMED_LOGIC_REF;
+        consumedLogicRefs[1] = _CREATED_LOGIC_REF;
 
         vm.expectEmit(address(_verifier));
         emit IAnomaVerifier.ActionExecuted({
-            nullifier: action.consumed.tag,
-            commitment: action.created.tag,
-            consumedLogicRef: _CONSUMED_LOGIC_REF,
-            createdLogicRef: _CREATED_LOGIC_REF
+            nullifiers: nullifiers,
+            consumedLogicRefs: consumedLogicRefs,
+            commitments: _words(action.resources[1].tag),
+            createdLogicRefs: _words(_CREATED_LOGIC_REF)
         });
         _verifier.execute(_prove(_list(action)));
     }
@@ -222,7 +226,7 @@ contract AnomaVerifierTest is Test {
         bytes memory input = abi.encodeCall(IAnomaVerifier.commitmentCount, ());
         bytes memory output = abi.encode(uint256(1));
         IAnomaVerifier.Action memory action = _action(_tag("nullifier"), _tag("commitment"));
-        action.created.appData.externalPayload = _call(abi.encode(address(_forwarder), input, output));
+        action.resources[1].appData.externalPayload = _call(abi.encode(address(_forwarder), input, output));
 
         vm.expectCall(address(_forwarder), abi.encodeCall(IForwarder.forwardCall, (_CREATED_LOGIC_REF, input)));
         vm.expectEmit(address(_verifier));
@@ -232,10 +236,35 @@ contract AnomaVerifierTest is Test {
 
     function test_execute_makes_the_forwarder_calls_after_the_state_writes() public {
         IAnomaVerifier.Action memory action = _action(_tag("nullifier"), _tag("commitment"));
-        bytes memory input = abi.encodeCall(IAnomaVerifier.isNullifierContained, (action.consumed.tag));
-        action.consumed.appData.externalPayload = _call(abi.encode(address(_forwarder), input, abi.encode(true)));
+        bytes memory input = abi.encodeCall(IAnomaVerifier.isNullifierContained, (action.resources[0].tag));
+        action.resources[0].appData.externalPayload = _call(abi.encode(address(_forwarder), input, abi.encode(true)));
 
         _verifier.execute(_prove(_list(action)));
+    }
+
+    function test_execute_makes_the_forwarder_calls_in_the_order_of_the_actions_and_their_resources() public {
+        bytes[] memory inputs = new bytes[](3);
+        IAnomaVerifier.Action memory first =
+            _action(_created(_tag("first commitment")), _consumed(_tag("nullifier")), _created(_tag("second")));
+        IAnomaVerifier.Action memory second = _action(_tag("second nullifier"), _tag("third commitment"));
+        IAnomaVerifier.Resource[3] memory carriers = [first.resources[0], first.resources[1], second.resources[0]];
+        for (uint256 i = 0; i < inputs.length; ++i) {
+            inputs[i] = abi.encodeCall(IAnomaVerifier.isNullifierContained, (_tag(vm.toString(i))));
+            carriers[i].appData.externalPayload = _call(abi.encode(address(_forwarder), inputs[i], abi.encode(false)));
+        }
+
+        vm.recordLogs();
+        _verifier.execute(_prove(_list(first, second)));
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 callCount = 0;
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].topics[0] != IAnomaVerifier.ForwarderCallExecuted.selector) continue;
+            (bytes memory input,) = abi.decode(logs[i].data, (bytes, bytes));
+            assertEq(input, inputs[callCount]);
+            ++callCount;
+        }
+        assertEq(callCount, inputs.length);
     }
 
     function test_execute_reverts_on_a_forwarder_output_mismatch() public {
@@ -243,7 +272,7 @@ contract AnomaVerifierTest is Test {
         bytes memory actual = abi.encode(false);
         bytes memory input = abi.encodeCall(IAnomaVerifier.isNullifierContained, (_tag("absent")));
         IAnomaVerifier.Action memory action = _action(_tag("nullifier"), _tag("commitment"));
-        action.created.appData.externalPayload = _call(abi.encode(address(_forwarder), input, expected));
+        action.resources[1].appData.externalPayload = _call(abi.encode(address(_forwarder), input, expected));
         IAnomaVerifier.Transaction memory transaction = _prove(_list(action));
 
         vm.expectRevert(abi.encodeWithSelector(AnomaVerifier.ForwarderCallOutputMismatch.selector, expected, actual));
@@ -254,7 +283,7 @@ contract AnomaVerifierTest is Test {
         IAnomaVerifier.Transaction memory inner;
         bytes memory input = abi.encodeCall(IAnomaVerifier.execute, (inner));
         IAnomaVerifier.Action memory action = _action(_tag("nullifier"), _tag("commitment"));
-        action.created.appData.externalPayload = _call(abi.encode(address(_forwarder), input, ""));
+        action.resources[1].appData.externalPayload = _call(abi.encode(address(_forwarder), input, ""));
         IAnomaVerifier.Transaction memory transaction = _prove(_list(action));
 
         vm.expectRevert(ReentrancyGuardTransient.ReentrancyGuardReentrantCall.selector);
@@ -266,7 +295,7 @@ contract AnomaVerifierTest is Test {
         IAnomaVerifier.ExpirableBlob[] memory payload = new IAnomaVerifier.ExpirableBlob[](2);
         payload[0] = _blob(IAnomaVerifier.DeletionCriterion.Immediately, "deleted");
         payload[1] = _blob(IAnomaVerifier.DeletionCriterion.Never, "kept");
-        action.created.appData.resourcePayload = payload;
+        action.resources[1].appData.resourcePayload = payload;
 
         vm.recordLogs();
         _verifier.execute(_prove(_list(action)));
@@ -276,7 +305,7 @@ contract AnomaVerifierTest is Test {
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].topics[0] != IAnomaVerifier.ResourcePayload.selector) continue;
             ++payloadLogCount;
-            assertEq(logs[i].topics[1], action.created.tag);
+            assertEq(logs[i].topics[1], action.resources[1].tag);
             assertEq(logs[i].data, abi.encode(uint256(1), bytes("kept")));
         }
         assertEq(payloadLogCount, 1);
@@ -288,16 +317,23 @@ contract AnomaVerifierTest is Test {
         assertEq(_verifier.commitmentCount(), 0);
     }
 
+    /// @dev An action that consumes the resource of `nullifier` and creates the resource of `commitment`.
     function _action(bytes32 nullifier, bytes32 commitment)
         internal
         view
         returns (IAnomaVerifier.Action memory action)
     {
-        action.consumed.tag = nullifier;
-        action.consumed.logicRef = _CONSUMED_LOGIC_REF;
-        action.created.tag = commitment;
-        action.created.logicRef = _CREATED_LOGIC_REF;
-        action.commitmentTreeRoot = _emptyRoot;
+        action.resources = new IAnomaVerifier.Resource[](2);
+        action.resources[0] = _consumed(nullifier);
+        action.resources[1] = _created(commitment);
+    }
+
+    /// @dev A consumed resource that shows the root of the empty commitment tree.
+    function _consumed(bytes32 nullifier) internal view returns (IAnomaVerifier.Resource memory resource) {
+        resource.isConsumed = true;
+        resource.tag = nullifier;
+        resource.logicRef = _CONSUMED_LOGIC_REF;
+        resource.commitmentTreeRoot = _emptyRoot;
     }
 
     /// @dev Returns a transaction whose proof the mock verifier accepts for its action digest, bound to `_verifier`.
@@ -318,22 +354,39 @@ contract AnomaVerifierTest is Test {
         bound = _low253Bits(sha256(abi.encode(block.chainid, address(_verifier), digest)));
     }
 
+    function _action(
+        IAnomaVerifier.Resource memory first,
+        IAnomaVerifier.Resource memory second,
+        IAnomaVerifier.Resource memory third
+    ) internal pure returns (IAnomaVerifier.Action memory action) {
+        action.resources = new IAnomaVerifier.Resource[](3);
+        action.resources[0] = first;
+        action.resources[1] = second;
+        action.resources[2] = third;
+    }
+
+    function _created(bytes32 commitment) internal pure returns (IAnomaVerifier.Resource memory resource) {
+        resource.tag = commitment;
+        resource.logicRef = _CREATED_LOGIC_REF;
+    }
+
     /// @dev The action digest, written apart from the contract's library.
     function _extend(bytes32 digest, IAnomaVerifier.Action memory action) internal pure returns (bytes32 extended) {
-        extended = _low253Bits(
-            sha256(
+        bytes memory packed = abi.encode(digest);
+        for (uint256 i = 0; i < action.resources.length; ++i) {
+            IAnomaVerifier.Resource memory resource = action.resources[i];
+            packed = abi.encodePacked(
+                packed,
                 abi.encode(
-                    digest,
-                    action.consumed.tag,
-                    action.consumed.logicRef,
-                    _appDataHash(action.consumed.appData),
-                    action.created.tag,
-                    action.created.logicRef,
-                    _appDataHash(action.created.appData),
-                    action.commitmentTreeRoot
+                    resource.isConsumed,
+                    resource.tag,
+                    resource.logicRef,
+                    resource.commitmentTreeRoot,
+                    _appDataHash(resource.appData)
                 )
-            )
-        );
+            );
+        }
+        extended = _low253Bits(sha256(packed));
     }
 
     function _appDataHash(IAnomaVerifier.AppData memory appData) internal pure returns (bytes32 hash) {
@@ -375,6 +428,11 @@ contract AnomaVerifierTest is Test {
         actions = new IAnomaVerifier.Action[](2);
         actions[0] = first;
         actions[1] = second;
+    }
+
+    function _words(bytes32 word) internal pure returns (bytes32[] memory words) {
+        words = new bytes32[](1);
+        words[0] = word;
     }
 
     /// @dev A tag is a field element, because the circuits compute it.

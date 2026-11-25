@@ -9,7 +9,7 @@ contracts:
   - name: AnomaVerifier
     # The same signatures as `IAnomaVerifier` in crates/bindings; test/config.test.ts compares them.
     events:
-      - event: ActionExecuted(bytes32 indexed nullifier, bytes32 indexed commitment, bytes32 consumedLogicRef, bytes32 createdLogicRef)
+      - event: ActionExecuted(bytes32[] nullifiers, bytes32[] consumedLogicRefs, bytes32[] commitments, bytes32[] createdLogicRefs)
       - event: ApplicationPayload(bytes32 indexed tag, uint256 index, bytes blob)
       - event: CommitmentTreeRootAdded(bytes32 root)
       - event: DiscoveryPayload(bytes32 indexed tag, uint256 index, bytes blob)

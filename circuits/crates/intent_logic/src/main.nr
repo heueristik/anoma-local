@@ -1,6 +1,7 @@
-use arm::{action::action_tree_root, hash::{self, hash}, resource::Resource};
+use arm::{action::ActionTreePath, hash::{self, hash}, resource::Resource};
 
-/// What the owner of an intent wants for it: each field of the resource that fills it, except the nonce, which comes from the nullifier of the intent.
+/// What the owner of an intent wants for it: each field of the resource that fills it, except the nonce, which comes from
+/// the compliance unit. A fresh random seed for each intent keeps two intents from accepting the same resource.
 pub struct Terms {
     pub want_logic_ref: Field,
     pub want_label_ref: Field,
@@ -37,10 +38,19 @@ fn main(
     nullifier_key: Field,
     terms: Terms,
     created: Resource,
+    created_path: ActionTreePath,
 ) {
     let _ = app_data_hash;
     if is_consumed {
-        check_consumed(tag, action_tree_root, intent, nullifier_key, terms, created);
+        check_consumed(
+            tag,
+            action_tree_root,
+            intent,
+            nullifier_key,
+            terms,
+            created,
+            created_path,
+        );
     }
 }
 
@@ -51,6 +61,7 @@ fn check_consumed(
     nullifier_key: Field,
     terms: Terms,
     created: Resource,
+    created_path: ActionTreePath,
 ) {
     assert(intent.nullifier(nullifier_key) == tag, "the tag is not the nullifier of the intent");
     // The kind of the intent then fixes its terms, so the deltas cancel only if each consumed intent fills them.
@@ -61,10 +72,10 @@ fn check_consumed(
     // One consumed intent of quantity 1 cancels each created one, so that each fills its terms once.
     assert(intent.quantity == 1, "the quantity of the intent is not 1");
     assert(
-        action_tree_root(tag, created.commitment()) == action_tree_root_of_action,
-        "the resource is not the created resource of the action",
+        created_path.root(created.commitment()) == action_tree_root_of_action,
+        "the resource is not a created resource of the action",
     );
-    // The compliance unit fixes the nonce, so the terms fix the whole created resource, and its receiver can compute it.
+    // The terms fix each field but the nonce, which the receiver computes from the nullifiers of the action.
     assert(created.logic_ref == terms.want_logic_ref, "the created resource has another logic");
     assert(created.label_ref == terms.want_label_ref, "the created resource has another label");
     assert(created.value_ref == terms.want_value_ref, "the created resource has another value");
@@ -125,7 +136,7 @@ fn check_consumed_fails_on_terms_that_are_not_the_label() {
     check(intent, terms, created);
 }
 
-#[test(should_fail_with = "the resource is not the created resource of the action")]
+#[test(should_fail_with = "the resource is not a created resource of the action")]
 fn check_consumed_fails_on_a_resource_of_another_action() {
     let (intent, terms, created) = filled();
     let tag = intent.nullifier(NULLIFIER_KEY);
@@ -133,26 +144,30 @@ fn check_consumed_fails_on_a_resource_of_another_action() {
     other.nonce += 1;
     check_consumed(
         tag,
-        action_tree_root(tag, other.commitment()),
+        arm::action::action_tree_root([tag, other.commitment()]),
         intent,
         NULLIFIER_KEY,
         terms,
         created,
+        arm::action::action_tree_path([tag, created.commitment()], 1),
     );
 }
 
 global NULLIFIER_KEY: Field = 42;
+global OTHER_TAG: Field = 43;
 
-/// Checks `created` as the created resource of the action that consumes `intent`.
+/// Checks `created` as the last resource of an action that consumes `intent` and another resource.
 fn check(intent: Resource, terms: Terms, created: Resource) {
     let tag = intent.nullifier(NULLIFIER_KEY);
+    let tags = [tag, OTHER_TAG, created.commitment()];
     check_consumed(
         tag,
-        action_tree_root(tag, created.commitment()),
+        arm::action::action_tree_root(tags),
         intent,
         NULLIFIER_KEY,
         terms,
         created,
+        arm::action::action_tree_path(tags, 2),
     );
 }
 

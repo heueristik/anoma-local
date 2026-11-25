@@ -7,13 +7,15 @@ An [Envio HyperIndex](https://docs.envio.dev/docs/HyperIndex/overview) indexer o
 | Entity | Content |
 | --- | --- |
 | `Transaction` | One `execute` call and its action digest. One EVM transaction can hold several calls. |
-| `Action` | The nullifier, the commitment and the two logic refs of one action, and the position of the commitment in the commitment tree (`commitmentLeafIndex`). |
+| `Action` | One action, with its consumed and created resources. |
+| `ConsumedResource` | The nullifier and the logic ref of one consumed resource, and its position among the consumed resources of its action. |
+| `CreatedResource` | The commitment and the logic ref of one created resource, its position among the created resources of its action, and the position of the commitment in the commitment tree (`commitmentLeafIndex`). |
 | `Payload` | One blob of a resource whose deletion criterion is `Never`, with its kind: `Resource`, `Discovery`, `External` or `Application`. |
 | `ForwarderCall` | The forwarder, the input and the output of one forwarder call. |
 | `CommitmentTreeRoot` | A root of the commitment tree and the number of commitments under it. |
 | `CommitmentTree` | The number of commitments and the latest root of each verifier. |
 
-A wallet finds its resources with the `Discovery` payloads, and proves a consumed resource with the commitments in the order of `commitmentLeafIndex` and a root from `CommitmentTreeRoot`.
+A wallet finds its resources with the `Discovery` payloads, and proves a consumed resource with the commitments in the order of `commitmentLeafIndex` and a root from `CommitmentTreeRoot`. The nonce of a created resource comes from its `index` and the nullifiers of its action in the order of their `index`.
 
 ## Requirements
 

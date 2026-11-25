@@ -1,10 +1,10 @@
 //! Values that the Noir library and the contract compute for the same inputs.
 
-use anoma_arm::action::action_tree_root;
+use anoma_arm::action::{Action, ResourceInstance, action_tree_root};
 use anoma_arm::app_data::{AppData, Blob, DeletionCriterion};
 use anoma_arm::belt::{Belt, node_hash};
-use anoma_arm::delta::unit_delta;
-use anoma_arm::digest::{ActionInstance, Deployment, extend};
+use anoma_arm::delta::{ResourceDelta, unit_delta};
+use anoma_arm::digest::{Deployment, extend};
 use anoma_arm::field::{from_bytes, scalar_limbs, to_bytes, to_hex};
 use anoma_arm::hash::poseidon2_hash;
 use anoma_arm::resource::{NullifierKey, Resource, created_nonce};
@@ -63,19 +63,29 @@ fn commitment_and_nullifier_match_noir() {
         ))
     );
     assert_eq!(
-        created_nonce(Fr::from(7u64)),
-        fr("0x08c1e2b6d8c28fbfe356dee9fca1e16a1dc8e059de5bb1fd80e30eb3d7517cff")
+        created_nonce(1, &[Fr::from(7u64), Fr::from(8u64)]),
+        fr("0x25e80bbd6ce26324007452bf09f53eca227e51b602da3ef8d841c2e3dc2d6174")
     );
     assert_eq!(
-        action_tree_root(Fr::from(1u64), Fr::from(2u64)),
-        fr("0x044c43b29cb65ade252b645f9d016e04f33e4a7f263d503e1ca1422b0f62aa04")
+        action_tree_root(&[Fr::from(1u64), Fr::from(2u64)]),
+        Ok(fr(
+            "0x1c6eb2d928178f569eff3997f1d9ab11069c403f16f842273d7d397f033b62dc"
+        ))
     );
 }
 
 #[test]
 fn unit_delta_matches_noir() {
     let kind = (Point::generator() + Point::generator()).into_affine();
-    let delta = unit_delta(kind, 10, kind, 7, Scalar::from(99u64));
+    let share = |quantity, is_consumed| ResourceDelta {
+        kind_base: kind,
+        quantity,
+        is_consumed,
+    };
+    let delta = unit_delta(
+        &[share(10, true), share(3, false), share(4, false)],
+        Scalar::from(99u64),
+    );
 
     assert_eq!(
         delta.x,
@@ -125,18 +135,20 @@ fn extend_matches_the_contract_and_noir() {
         fr("0x174708fff7719dd5979ec875d56cd2286f6d3cf7ec317a3b25632aab28ec37bb")
     );
 
-    let action = ActionInstance {
-        nullifier: Fr::from(1u64),
-        consumed_logic_ref: Fr::from(2u64),
-        consumed_app_data_hash: empty,
-        commitment: Fr::from(4u64),
-        created_logic_ref: Fr::from(5u64),
-        created_app_data_hash: empty,
-        commitment_tree_root: Fr::from(0u64),
+    let resource =
+        |is_consumed, tag: u64, logic_ref: u64, commitment_tree_root: u64| ResourceInstance {
+            is_consumed,
+            tag: Fr::from(tag),
+            logic_ref: Fr::from(logic_ref),
+            commitment_tree_root: Fr::from(commitment_tree_root),
+            app_data: AppData::default(),
+        };
+    let action = Action {
+        resources: vec![resource(true, 1, 2, 3), resource(false, 4, 5, 0)],
     };
     assert_eq!(
         extend(Fr::from(0u64), &action),
-        fr("0x10545fff186a4bd171fe33842768c98e12133b06c13ee14b99182ef580ef78bf")
+        fr("0x0b60bead17f79a743fd35dc5f1d9948be77dceede95f75c6a7de00414a41138d")
     );
 }
 
