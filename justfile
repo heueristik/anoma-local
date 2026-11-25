@@ -262,8 +262,23 @@ crates-execution-gas: circuits-keys
     NARGO={{ nargo }} BB={{ bb }} cargo bench -p anoma-integration-test --features slow-tests --bench execution_gas
 
 # Write the Solidity verifier of the Groth16 wrap for the root circuit; the first run makes the single-party setup, so the verifier is for tests only
-crates-groth16-verifier output="target/Groth16Verifier.sol": circuits-keys
+crates-groth16-verifier output="contracts/src/Groth16Verifier.sol": circuits-keys
     NARGO={{ nargo }} BB={{ bb }} cargo run -p anoma-integration-test --bin groth16_verifier -- target/tmp/wrap-keys "{{ output }}"
+    forge fmt --root contracts "{{ output }}"
+
+# Check that the committed Groth16 verifier is for the compiled root circuit
+groth16-verifier-check: circuits-keys
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! log=$({{ bb }} write_vk -b circuits/target/root.json -o circuits/target/root-vk -t noir-recursive-no-zk 2>&1); then
+        echo "$log" >&2
+        exit 1
+    fi
+    hash="0x$(xxd -p -c 32 circuits/target/root-vk/vk_hash)"
+    if ! grep -qxF "//! Generated for the root circuit with the key hash $hash." contracts/src/Groth16Verifier.sol; then
+        echo "contracts/src/Groth16Verifier.sol is not for the root circuit with the key hash $hash; run \`just crates-groth16-verifier\`" >&2
+        exit 1
+    fi
 
 # Lint the crates for both feature sets
 crates-lint:

@@ -10,7 +10,7 @@ The terms are in [CONTEXT.md](CONTEXT.md).
 
 | Path | Content |
 | --- | --- |
-| `contracts/` | The `AnomaVerifier` contract, its Poseidon2 commitment tree and the action digest |
+| `contracts/` | The `AnomaVerifier` contract, its Poseidon2 commitment tree and the action digest, and the Groth16 verifier of the test keys |
 | `circuits/` | The Noir circuits: the libraries `arm`, `compliance` and `step`, the logics `trivial_logic`, `intent_logic` and `token_logic`, `root`, and in `variants/` the compliance and step circuits for each size of action |
 | `crates/arm` | The resource machine outside the circuits: resources, kinds, deltas, the commitment tree and the action digest |
 | `crates/groth16-wrap` | The Groth16 wrap of a bb proof through a Go library on gnark, and the wrapper of the root proof |
@@ -74,7 +74,7 @@ The chain is the ABI of the AnomaVerifier. `crates/bindings` and the `Chain` of 
 
 `just crates-prove-times` prints the time of each proof of a wrap, a transfer, an unwrap, a transfer with change and a split into three as a Markdown table. `just crates-execution-gas` executes them on anvil with the Osaka hardfork and prints their gas. Both use the same keys.
 
-`just crates-groth16-verifier` writes the Solidity verifier of these keys to `target/Groth16Verifier.sol`. Pass another path as an argument to write it elsewhere. The verifier contains the Groth16 verifying key of the root circuit, so each change of the root circuit or of the keys needs a new verifier.
+`just crates-groth16-verifier` writes the Solidity verifier of these keys to `contracts/src/Groth16Verifier.sol`. Pass another path as an argument to write it elsewhere. The verifier contains the Groth16 verifying key of the root circuit, so each change of the root circuit or of the keys needs a new verifier. A comment below its license identifier names the key hash of the root circuit, and `just groth16-verifier-check` checks that hash against the compiled root circuit. CI runs this check only for `main`, so the root circuit can change on `next` without a new setup. The committed verifier comes from a single-party setup on one machine: only that machine has the proving key, and it can make false proofs. Use it for tests only.
 
 ## License
 

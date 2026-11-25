@@ -1,5 +1,5 @@
 {
-  "filter_paths": "dependencies/|vendor/",
+  "filter_paths": "dependencies/|vendor/|src/Groth16Verifier.sol",
   "detectors_to_exclude": [
     "assembly",
     "calls-loop",

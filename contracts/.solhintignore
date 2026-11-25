@@ -1,0 +1,2 @@
+# gnark generates it; `just crates-groth16-verifier` writes it again.
+src/Groth16Verifier.sol

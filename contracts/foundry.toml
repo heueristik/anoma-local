@@ -33,7 +33,10 @@ severity = ["high", "medium", "low", "info", "gas", "code-size"] # The default l
 exclude_lints = [
     "internal-function-used-once", # Counts the call sites of `src` alone, because `ignore` hides those of the tests.
 ]
-ignore = ["test/**/*.sol"]                                       # Relaxed the way `.solhint.other.json` relaxes them.
+ignore = [
+    "test/**/*.sol",            # Relaxed the way `.solhint.other.json` relaxes them.
+    "src/Groth16Verifier.sol",  # gnark generates it; `just crates-groth16-verifier` writes it again.
+]
 
 [dependencies]
 "@openzeppelin-contracts" = "5.7.0"
