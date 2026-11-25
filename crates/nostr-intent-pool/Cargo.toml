@@ -1,0 +1,27 @@
+[package]
+name = "anoma-nostr-intent-pool"
+description = "An intent pool on Nostr relays: each intent is an event that names a Blossom blob of its proved actions"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+
+[dependencies]
+anoma-arm = { workspace = true }
+anoma-intent-pool = { workspace = true }
+anoma-prover = { workspace = true }
+ark-ec = { workspace = true }
+blossom-rs = { workspace = true, features = ["client"] }
+hex = { workspace = true }
+nostr = { workspace = true }
+nostr-sdk = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+axum = { workspace = true }
+blossom-rs = { workspace = true, features = ["server"] }
+nostr-sdk = { workspace = true, features = ["local-relay"] }
+tokio = { workspace = true }

@@ -28,9 +28,13 @@ ark-bn254 = { version = "0.6.0", default-features = false, features = ["scalar_f
 ark-ec = "0.6.0"
 ark-ff = "0.6.0"
 ark-grumpkin = "0.6.0"
+axum = "0.8.9"
+blossom-rs = { version = "0.6.1", default-features = false }
 bn254_blackbox_solver = "1.0.0"
 cp_sat = "0.4.1"
 hex = "0.4.3"
+nostr = "0.45.7"
+nostr-sdk = "0.45.6"
 p256 = { version = "0.14.0", default-features = false, features = ["ecdsa"] }
 rand_core = { version = "0.6.4", features = ["getrandom"] }
 serde = { version = "1.0.229", features = ["derive"] }
